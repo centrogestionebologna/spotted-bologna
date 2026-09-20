@@ -1,10 +1,10 @@
 function CommentSection({
   post,
   comments,
+  user,
   commentText,
   setCommentText,
-  inviaCommento,
-  user
+  inviaCommento
 }) {
   return (
     <>
@@ -19,8 +19,7 @@ function CommentSection({
           <div
             key={commento.id}
             style={{
-              backgroundColor:
-                "#f2f2f2",
+              backgroundColor: "#f2f2f2",
               padding: "5px",
               marginBottom: "5px"
             }}

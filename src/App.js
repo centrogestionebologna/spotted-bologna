@@ -1,7 +1,9 @@
 import Post from "./components/Post";
 import AdminPanel from "./components/AdminPanel";
+
 import { useState, useEffect } from "react";
 import { signInWithPopup } from "firebase/auth";
+
 import {
   doc,
   getDoc,
@@ -23,6 +25,7 @@ function App() {
   const [posts, setPosts] = useState([]);
   const [pendingPosts, setPendingPosts] = useState([]);
   const [comments, setComments] = useState([]);
+  const [likes, setLikes] = useState([]);
 
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -33,7 +36,25 @@ function App() {
     caricaPost();
     caricaPendingPosts();
     caricaCommenti();
+    caricaLike();
   }, []);
+
+  const caricaLike = async () => {
+    const snapshot = await getDocs(
+      collection(db, "likes")
+    );
+
+    const lista = [];
+
+    snapshot.forEach((docu) => {
+      lista.push({
+        id: docu.id,
+        ...docu.data()
+      });
+    });
+
+    setLikes(lista);
+  };
 
   const caricaPost = async () => {
     const snapshot = await getDocs(collection(db, "posts"));
@@ -236,6 +257,42 @@ function App() {
     caricaCommenti();
   };
 
+const toggleLike = async (postId) => {
+
+  if (!user) return;
+
+  const likeEsistente = likes.find(
+    (like) =>
+      like.postId === postId &&
+      like.userId === user.uid
+  );
+
+  if (likeEsistente) {
+
+    await deleteDoc(
+      doc(db, "likes", likeEsistente.id)
+    );
+
+  } else {
+
+    const userDoc = await getDoc(
+      doc(db, "users", user.uid)
+    );
+
+    await addDoc(
+      collection(db, "likes"),
+      {
+        postId: postId,
+        userId: user.uid,
+        nickname: userDoc.data().nickname
+      }
+    );
+
+  }
+
+  caricaLike();
+};
+
   return (
     <div style={{ padding: "20px" }}>
       <h1>SPOTTED BOLOGNA OFFICIAL</h1>
@@ -312,6 +369,8 @@ function App() {
   commentText={commentText}
   setCommentText={setCommentText}
   inviaCommento={inviaCommento}
+  likes={likes}
+  toggleLike={toggleLike}
 />
 ))}
     </div>
