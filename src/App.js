@@ -1,3 +1,5 @@
+import Post from "./components/Post";
+import AdminPanel from "./components/AdminPanel";
 import { useState, useEffect } from "react";
 import { signInWithPopup } from "firebase/auth";
 import {
@@ -289,118 +291,29 @@ function App() {
         </>
       )}
 
-      {isAdmin && (
-        <div>
-          <hr />
-
-          <h2>Pannello Admin</h2>
-
-          {pendingPosts.map((post) => (
-            <div
-              key={post.id}
-              style={{
-                border: "2px solid orange",
-                padding: "10px",
-                marginBottom: "10px"
-              }}
-            >
-              <p>{post.text}</p>
-
-              <button
-                onClick={() =>
-                  approvaPost(post)
-                }
-              >
-                ✅ Approva
-              </button>
-
-              <button
-                onClick={() =>
-                  rifiutaPost(post.id)
-                }
-                style={{
-                  marginLeft: "10px"
-                }}
-              >
-                ❌ Rifiuta
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+{isAdmin && (
+  <AdminPanel
+  pendingPosts={pendingPosts}
+  approvaPost={approvaPost}
+  rifiutaPost={rifiutaPost}
+/>
+)}
 
       <hr />
 
       <h2>Spotted pubblicati</h2>
 
-      {posts.map((post) => (
-        <div
-          key={post.id}
-          style={{
-            border: "1px solid gray",
-            padding: "10px",
-            marginBottom: "20px"
-          }}
-        >
-          <p>{post.text}</p>
-
-          <p>
-            ❤️ {post.likes} | 💬 {
-              comments.filter(
-                (c) => c.postId === post.id
-              ).length
-            }
-          </p>
-
-          <h4>Commenti</h4>
-
-          {comments
-            .filter(
-              (commento) =>
-                commento.postId === post.id
-            )
-            .map((commento) => (
-              <div
-                key={commento.id}
-                style={{
-                  backgroundColor:
-                    "#f2f2f2",
-                  padding: "5px",
-                  marginBottom: "5px"
-                }}
-              >
-                <strong>
-                  {commento.nickname}
-                </strong>
-                <br />
-                {commento.text}
-              </div>
-            ))}
-
-          {user && (
-            <div>
-              <input
-                type="text"
-                placeholder="Scrivi un commento"
-                value={commentText}
-                onChange={(e) =>
-                  setCommentText(
-                    e.target.value
-                  )
-                }
-              />
-
-              <button
-                onClick={() =>
-                  inviaCommento(post.id)
-                }
-              >
-                Invia
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
+{posts.map((post) => (
+  <Post
+  key={post.id}
+  post={post}
+  comments={comments}
+  user={user}
+  commentText={commentText}
+  setCommentText={setCommentText}
+  inviaCommento={inviaCommento}
+/>
+))}
     </div>
   );
 }
