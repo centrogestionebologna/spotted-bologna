@@ -13,21 +13,27 @@ import {
 import { auth, provider, db } from "./firebase";
 
 function App() {
-
   const [nickname, setNickname] = useState("");
+  const [savedNickname, setSavedNickname] = useState("");
+
   const [user, setUser] = useState(null);
+
   const [posts, setPosts] = useState([]);
   const [pendingPosts, setPendingPosts] = useState([]);
+  const [comments, setComments] = useState([]);
+
   const [isAdmin, setIsAdmin] = useState(false);
+
   const [spottedText, setSpottedText] = useState("");
+  const [commentText, setCommentText] = useState("");
 
   useEffect(() => {
     caricaPost();
     caricaPendingPosts();
+    caricaCommenti();
   }, []);
 
   const caricaPost = async () => {
-
     const snapshot = await getDocs(collection(db, "posts"));
 
     const lista = [];
@@ -43,7 +49,6 @@ function App() {
   };
 
   const caricaPendingPosts = async () => {
-
     const snapshot = await getDocs(
       collection(db, "pendingPosts")
     );
@@ -60,10 +65,25 @@ function App() {
     setPendingPosts(lista);
   };
 
+  const caricaCommenti = async () => {
+    const snapshot = await getDocs(
+      collection(db, "comments")
+    );
+
+    const lista = [];
+
+    snapshot.forEach((docu) => {
+      lista.push({
+        id: docu.id,
+        ...docu.data()
+      });
+    });
+
+    setComments(lista);
+  };
+
   const loginGoogle = async () => {
-
     try {
-
       const result = await signInWithPopup(auth, provider);
 
       const currentUser = result.user;
@@ -72,15 +92,21 @@ function App() {
 
       const userSnap = await getDoc(userRef);
 
-      if (
-        userSnap.exists() &&
-        userSnap.data().role === "admin"
-      ) {
-        setIsAdmin(true);
+      if (userSnap.exists()) {
+
+        if (userSnap.data().role === "admin") {
+          setIsAdmin(true);
+        }
+
+        if (userSnap.data().nickname) {
+          setSavedNickname(
+            userSnap.data().nickname
+          );
+        }
+
       }
 
       if (!userSnap.exists()) {
-
         await setDoc(userRef, {
           uid: currentUser.uid,
           name: currentUser.displayName,
@@ -89,7 +115,6 @@ function App() {
           nickname: "",
           createdAt: new Date().toISOString()
         });
-
       }
 
       setUser(currentUser);
@@ -100,27 +125,27 @@ function App() {
   };
 
   const salvaNickname = async () => {
-
     if (nickname.trim() === "") {
       alert("Inserisci un nickname");
       return;
     }
 
-    const usersSnapshot = await getDocs(collection(db, "users"));
+    const usersSnapshot = await getDocs(
+      collection(db, "users")
+    );
 
     let nicknameEsistente = false;
 
     usersSnapshot.forEach((u) => {
-
       const data = u.data();
 
       if (
         data.nickname &&
-        data.nickname.toLowerCase() === nickname.toLowerCase()
+        data.nickname.toLowerCase() ===
+          nickname.toLowerCase()
       ) {
         nicknameEsistente = true;
       }
-
     });
 
     if (nicknameEsistente) {
@@ -136,12 +161,12 @@ function App() {
       { merge: true }
     );
 
-    alert("Nickname salvato!");
+    setSavedNickname(nickname);
 
+    alert("Nickname salvato!");
   };
 
   const inviaSpotted = async () => {
-
     if (spottedText.trim() === "") {
       alert("Scrivi un messaggio");
       return;
@@ -162,7 +187,6 @@ function App() {
   };
 
   const approvaPost = async (post) => {
-
     await addDoc(collection(db, "posts"), {
       text: post.text,
       likes: 0,
@@ -179,7 +203,6 @@ function App() {
   };
 
   const rifiutaPost = async (id) => {
-
     await deleteDoc(
       doc(db, "pendingPosts", id)
     );
@@ -187,9 +210,32 @@ function App() {
     caricaPendingPosts();
   };
 
+  const inviaCommento = async (postId) => {
+    if (!commentText.trim()) {
+      return;
+    }
+
+    const userDoc = await getDoc(
+      doc(db, "users", user.uid)
+    );
+
+    const nicknameUtente =
+      userDoc.data().nickname;
+
+    await addDoc(collection(db, "comments"), {
+      postId: postId,
+      nickname: nicknameUtente,
+      text: commentText,
+      createdAt: new Date().toISOString()
+    });
+
+    setCommentText("");
+
+    caricaCommenti();
+  };
+
   return (
     <div style={{ padding: "20px" }}>
-
       <h1>SPOTTED BOLOGNA OFFICIAL</h1>
 
       {!user && (
@@ -200,17 +246,27 @@ function App() {
 
       {user && (
         <>
-          <h2>Scegli nickname</h2>
+          {savedNickname ? (
+            <h2>
+              Nickname: {savedNickname}
+            </h2>
+          ) : (
+            <>
+              <h2>Scegli nickname</h2>
 
-          <input
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="Nickname"
-          />
+              <input
+                value={nickname}
+                onChange={(e) =>
+                  setNickname(e.target.value)
+                }
+                placeholder="Nickname"
+              />
 
-          <button onClick={salvaNickname}>
-            Salva nickname
-          </button>
+              <button onClick={salvaNickname}>
+                Salva nickname
+              </button>
+            </>
+          )}
 
           <hr />
 
@@ -220,7 +276,9 @@ function App() {
             rows="4"
             cols="50"
             value={spottedText}
-            onChange={(e) => setSpottedText(e.target.value)}
+            onChange={(e) =>
+              setSpottedText(e.target.value)
+            }
           />
 
           <br />
@@ -233,13 +291,11 @@ function App() {
 
       {isAdmin && (
         <div>
-
           <hr />
 
           <h2>Pannello Admin</h2>
 
           {pendingPosts.map((post) => (
-
             <div
               key={post.id}
               style={{
@@ -248,26 +304,28 @@ function App() {
                 marginBottom: "10px"
               }}
             >
-
               <p>{post.text}</p>
 
               <button
-                onClick={() => approvaPost(post)}
+                onClick={() =>
+                  approvaPost(post)
+                }
               >
                 ✅ Approva
               </button>
 
               <button
-                onClick={() => rifiutaPost(post.id)}
-                style={{ marginLeft: "10px" }}
+                onClick={() =>
+                  rifiutaPost(post.id)
+                }
+                style={{
+                  marginLeft: "10px"
+                }}
               >
                 ❌ Rifiuta
               </button>
-
             </div>
-
           ))}
-
         </div>
       )}
 
@@ -276,26 +334,73 @@ function App() {
       <h2>Spotted pubblicati</h2>
 
       {posts.map((post) => (
-
         <div
           key={post.id}
           style={{
             border: "1px solid gray",
             padding: "10px",
-            marginBottom: "10px"
+            marginBottom: "20px"
           }}
         >
-
           <p>{post.text}</p>
 
           <p>
-            ❤️ {post.likes} | 💬 {post.comments}
+            ❤️ {post.likes} | 💬 {
+              comments.filter(
+                (c) => c.postId === post.id
+              ).length
+            }
           </p>
 
+          <h4>Commenti</h4>
+
+          {comments
+            .filter(
+              (commento) =>
+                commento.postId === post.id
+            )
+            .map((commento) => (
+              <div
+                key={commento.id}
+                style={{
+                  backgroundColor:
+                    "#f2f2f2",
+                  padding: "5px",
+                  marginBottom: "5px"
+                }}
+              >
+                <strong>
+                  {commento.nickname}
+                </strong>
+                <br />
+                {commento.text}
+              </div>
+            ))}
+
+          {user && (
+            <div>
+              <input
+                type="text"
+                placeholder="Scrivi un commento"
+                value={commentText}
+                onChange={(e) =>
+                  setCommentText(
+                    e.target.value
+                  )
+                }
+              />
+
+              <button
+                onClick={() =>
+                  inviaCommento(post.id)
+                }
+              >
+                Invia
+              </button>
+            </div>
+          )}
         </div>
-
       ))}
-
     </div>
   );
 }
