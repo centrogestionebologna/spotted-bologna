@@ -1,21 +1,69 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signInWithPopup } from "firebase/auth";
 import {
   doc,
   getDoc,
   setDoc,
   getDocs,
-  collection
+  collection,
+  addDoc,
+  deleteDoc
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
 
 function App() {
+
   const [nickname, setNickname] = useState("");
   const [user, setUser] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [pendingPosts, setPendingPosts] = useState([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [spottedText, setSpottedText] = useState("");
+
+  useEffect(() => {
+    caricaPost();
+    caricaPendingPosts();
+  }, []);
+
+  const caricaPost = async () => {
+
+    const snapshot = await getDocs(collection(db, "posts"));
+
+    const lista = [];
+
+    snapshot.forEach((docu) => {
+      lista.push({
+        id: docu.id,
+        ...docu.data()
+      });
+    });
+
+    setPosts(lista);
+  };
+
+  const caricaPendingPosts = async () => {
+
+    const snapshot = await getDocs(
+      collection(db, "pendingPosts")
+    );
+
+    const lista = [];
+
+    snapshot.forEach((docu) => {
+      lista.push({
+        id: docu.id,
+        ...docu.data()
+      });
+    });
+
+    setPendingPosts(lista);
+  };
 
   const loginGoogle = async () => {
+
     try {
+
       const result = await signInWithPopup(auth, provider);
 
       const currentUser = result.user;
@@ -24,7 +72,15 @@ function App() {
 
       const userSnap = await getDoc(userRef);
 
+      if (
+        userSnap.exists() &&
+        userSnap.data().role === "admin"
+      ) {
+        setIsAdmin(true);
+      }
+
       if (!userSnap.exists()) {
+
         await setDoc(userRef, {
           uid: currentUser.uid,
           name: currentUser.displayName,
@@ -33,6 +89,7 @@ function App() {
           nickname: "",
           createdAt: new Date().toISOString()
         });
+
       }
 
       setUser(currentUser);
@@ -53,8 +110,9 @@ function App() {
 
     let nicknameEsistente = false;
 
-    usersSnapshot.forEach((userDoc) => {
-      const data = userDoc.data();
+    usersSnapshot.forEach((u) => {
+
+      const data = u.data();
 
       if (
         data.nickname &&
@@ -62,6 +120,7 @@ function App() {
       ) {
         nicknameEsistente = true;
       }
+
     });
 
     if (nicknameEsistente) {
@@ -69,10 +128,8 @@ function App() {
       return;
     }
 
-    const userRef = doc(db, "users", user.uid);
-
     await setDoc(
-      userRef,
+      doc(db, "users", user.uid),
       {
         nickname: nickname
       },
@@ -80,10 +137,59 @@ function App() {
     );
 
     alert("Nickname salvato!");
+
+  };
+
+  const inviaSpotted = async () => {
+
+    if (spottedText.trim() === "") {
+      alert("Scrivi un messaggio");
+      return;
+    }
+
+    await addDoc(collection(db, "pendingPosts"), {
+      text: spottedText,
+      authorId: user.uid,
+      createdAt: new Date().toISOString(),
+      status: "pending"
+    });
+
+    alert("Spotted inviato per approvazione");
+
+    setSpottedText("");
+
+    caricaPendingPosts();
+  };
+
+  const approvaPost = async (post) => {
+
+    await addDoc(collection(db, "posts"), {
+      text: post.text,
+      likes: 0,
+      comments: 0,
+      author: "admin"
+    });
+
+    await deleteDoc(
+      doc(db, "pendingPosts", post.id)
+    );
+
+    caricaPost();
+    caricaPendingPosts();
+  };
+
+  const rifiutaPost = async (id) => {
+
+    await deleteDoc(
+      doc(db, "pendingPosts", id)
+    );
+
+    caricaPendingPosts();
   };
 
   return (
     <div style={{ padding: "20px" }}>
+
       <h1>SPOTTED BOLOGNA OFFICIAL</h1>
 
       {!user && (
@@ -93,24 +199,103 @@ function App() {
       )}
 
       {user && (
-        <div>
-          <h2>Scegli il tuo nickname</h2>
+        <>
+          <h2>Scegli nickname</h2>
 
           <input
-            type="text"
-            placeholder="Nickname"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
+            placeholder="Nickname"
           />
 
-          <button
-            onClick={salvaNickname}
-            style={{ marginLeft: "10px" }}
-          >
+          <button onClick={salvaNickname}>
             Salva nickname
           </button>
+
+          <hr />
+
+          <h2>Invia uno Spotted</h2>
+
+          <textarea
+            rows="4"
+            cols="50"
+            value={spottedText}
+            onChange={(e) => setSpottedText(e.target.value)}
+          />
+
+          <br />
+
+          <button onClick={inviaSpotted}>
+            Invia Spotted
+          </button>
+        </>
+      )}
+
+      {isAdmin && (
+        <div>
+
+          <hr />
+
+          <h2>Pannello Admin</h2>
+
+          {pendingPosts.map((post) => (
+
+            <div
+              key={post.id}
+              style={{
+                border: "2px solid orange",
+                padding: "10px",
+                marginBottom: "10px"
+              }}
+            >
+
+              <p>{post.text}</p>
+
+              <button
+                onClick={() => approvaPost(post)}
+              >
+                ✅ Approva
+              </button>
+
+              <button
+                onClick={() => rifiutaPost(post.id)}
+                style={{ marginLeft: "10px" }}
+              >
+                ❌ Rifiuta
+              </button>
+
+            </div>
+
+          ))}
+
         </div>
       )}
+
+      <hr />
+
+      <h2>Spotted pubblicati</h2>
+
+      {posts.map((post) => (
+
+        <div
+          key={post.id}
+          style={{
+            border: "1px solid gray",
+            padding: "10px",
+            marginBottom: "10px"
+          }}
+        >
+
+          <p>{post.text}</p>
+
+          <p>
+            ❤️ {post.likes} | 💬 {post.comments}
+          </p>
+
+        </div>
+
+      ))}
+
     </div>
   );
 }
