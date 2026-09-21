@@ -16,14 +16,7 @@ function CommentSection({
             commento.postId === post.id
         )
         .map((commento) => (
-          <div
-            key={commento.id}
-            style={{
-              backgroundColor: "#f2f2f2",
-              padding: "5px",
-              marginBottom: "5px"
-            }}
-          >
+          <div className="comment-card">
             <strong>
               {commento.nickname}
             </strong>

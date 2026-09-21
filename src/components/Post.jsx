@@ -16,13 +16,7 @@ function Post({
     useState(false);
 
   return (
-    <div
-      style={{
-        border: "1px solid gray",
-        padding: "10px",
-        marginBottom: "20px"
-      }}
-    >
+    <div className="post-card">
       <p>{post.text}</p>
 
       <LikeButton

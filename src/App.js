@@ -1,5 +1,6 @@
 import Post from "./components/Post";
 import AdminPanel from "./components/AdminPanel";
+import "./App.css";
 
 import { useState, useEffect } from "react";
 import {
@@ -362,7 +363,7 @@ const logout = async () => {
 };
 
   return (
-    <div style={{ padding: "20px" }}>
+    <div className="app-container">
       <h1>SPOTTED BOLOGNA OFFICIAL</h1>
 
 {user && (
@@ -409,7 +410,7 @@ const logout = async () => {
           )}
 
           <hr />
-
+        <div className="section-card">
           <h2>Invia uno Spotted</h2>
 
           <textarea
@@ -426,7 +427,8 @@ const logout = async () => {
           <button onClick={inviaSpotted}>
             Invia Spotted
           </button>
-        </>
+        </div>
+      </>
       )}
 
 {isAdmin && (
