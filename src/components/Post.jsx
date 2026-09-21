@@ -19,40 +19,65 @@ function Post({
     <div className="post-card">
       <p>{post.text}</p>
 
-      <LikeButton
-        liked={
-          likes.some(
-            (like) =>
-              like.postId === post.id &&
-              user &&
-              like.userId === user.uid
-          )
-        }
-        onToggleLike={() =>
-          toggleLike(post.id)
-        }
-      />
+    <div className="interaction-bar">
 
-      <button
-        onClick={() =>
-          setShowLikes(!showLikes)
-        }
-        style={{
-          marginLeft: "10px"
-        }}
-      >
-        Visualizza chi ha messo like
-      </button>
+  <div className="interaction-left">
+
+    <LikeButton
+      liked={
+        likes.some(
+          (like) =>
+            like.postId === post.id &&
+            user &&
+            like.userId === user.uid
+        )
+      }
+      onToggleLike={() =>
+        toggleLike(post.id)
+      }
+    />
+
+    <button
+      className="share-btn"
+      onClick={() =>
+        navigator.clipboard.writeText(
+          window.location.href
+        )
+      }
+    >
+      ↗
+    </button>
+
+  </div>
+
+  <div
+    className="interaction-right"
+    onClick={() =>
+      setShowLikes(!showLikes)
+    }
+  >
+    {likes.filter(
+      (like) =>
+        like.postId === post.id
+    ).length}
+
+    {" like - "}
+
+    {
+      comments.filter(
+        (c) =>
+          c.postId === post.id
+      ).length
+    }
+
+    {" commenti"}
+  </div>
+
+</div>
+
 
       {showLikes && (
-        <div
-          style={{
-            backgroundColor: "#eeeeee",
-            padding: "10px",
-            marginTop: "10px",
-            marginBottom: "10px"
-          }}
-        >
+        <div className="like-panel">
           <strong>
             Hanno messo like:
           </strong>
@@ -63,28 +88,15 @@ function Post({
                 like.postId === post.id
             )
             .map((like) => (
-              <div key={like.id}>
-                {like.nickname}
-              </div>
+              <div
+  key={like.id}
+  className="like-user"
+>
+  {like.nickname}
+</div>
             ))}
         </div>
       )}
-
-      <p>
-        ❤️ {
-          likes.filter(
-            (like) =>
-              like.postId === post.id
-          ).length
-        }
-        {" | "}
-        💬 {
-          comments.filter(
-            (c) =>
-              c.postId === post.id
-          ).length
-        }
-      </p>
 
       <CommentSection
   post={post}

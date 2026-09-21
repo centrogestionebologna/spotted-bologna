@@ -32,7 +32,11 @@ function App() {
   const [pendingPosts, setPendingPosts] = useState([]);
   const [comments, setComments] = useState([]);
   const [likes, setLikes] = useState([]);
+  const [numeroIscritti, setNumeroIscritti] =
+  useState(0);
 
+  const [newsletter, setNewsletter] =
+  useState("giornaliera");
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [spottedText, setSpottedText] = useState("");
@@ -45,6 +49,7 @@ useEffect(() => {
   caricaPendingPosts();
   caricaCommenti();
   caricaLike();
+  caricaIscritti();
 
   onAuthStateChanged(
     auth,
@@ -103,6 +108,15 @@ useEffect(() => {
 
     setLikes(lista);
   };
+  const caricaIscritti = async () => {
+
+  const snapshot = await getDocs(
+    collection(db, "users")
+  );
+
+  setNumeroIscritti(snapshot.size);
+
+};
 
   const caricaPost = async () => {
     const snapshot = await getDocs(collection(db, "posts"));
@@ -173,6 +187,14 @@ useEffect(() => {
           setSavedNickname(
             userSnap.data().nickname
           );
+        if (
+  userSnap.data().newsletter
+) {
+  setNewsletter(
+    userSnap.data().newsletter
+  );
+}
+
         }
 
       }
@@ -363,6 +385,24 @@ const logout = async () => {
 
 };
 
+const salvaNewsletter = async () => {
+
+  if (!user) return;
+
+  await setDoc(
+    doc(db, "users", user.uid),
+    {
+      newsletter: newsletter
+    },
+    { merge: true }
+  );
+
+  alert(
+    "Preferenze newsletter salvate"
+  );
+
+};
+
 return (
   <div className="app-container">
 
@@ -372,6 +412,10 @@ return (
     />
     <ProfileCard
   nickname={savedNickname}
+  iscritti={numeroIscritti}
+  newsletter={newsletter}
+  setNewsletter={setNewsletter}
+  salvaNewsletter={salvaNewsletter}
 />
 
     {!user && (
