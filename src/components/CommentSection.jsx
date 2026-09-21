@@ -18,12 +18,9 @@ function CommentSection({
         .map((commento) => (
           <div className="comment-card">
             <strong>
-              {commento.nickname}
-            </strong>
-
-            <br />
-
-            {commento.text}
+  {commento.nickname}:
+</strong>{" "}
+{commento.text}
           </div>
         ))}
 

@@ -1,3 +1,4 @@
+import Header from "./components/Header";
 import Post from "./components/Post";
 import AdminPanel from "./components/AdminPanel";
 import "./App.css";
@@ -362,55 +363,48 @@ const logout = async () => {
 
 };
 
-  return (
-    <div className="app-container">
-      <h1>SPOTTED BOLOGNA OFFICIAL</h1>
+return (
+  <div className="app-container">
 
-{user && (
+    <Header
+      nickname={savedNickname}
+      logout={logout}
+    />
 
-  <button
-    onClick={logout}
-    style={{
-      marginBottom: "20px"
-    }}
-  >
-    Esci
-  </button>
+    {!user && (
+      <button onClick={loginGoogle}>
+        Accedi con Google
+      </button>
+    )}
 
-)}
+    {user && (
+      <>
+        {savedNickname ? (
+          <h2>
+            Nickname: {savedNickname}
+          </h2>
+        ) : (
+          <>
+            <h2>Scegli nickname</h2>
 
-      {!user && (
-        <button onClick={loginGoogle}>
-          Accedi con Google
-        </button>
-      )}
+            <input
+              value={nickname}
+              onChange={(e) =>
+                setNickname(e.target.value)
+              }
+              placeholder="Nickname"
+            />
 
-      {user && (
-        <>
-          {savedNickname ? (
-            <h2>
-              Nickname: {savedNickname}
-            </h2>
-          ) : (
-            <>
-              <h2>Scegli nickname</h2>
+            <button onClick={salvaNickname}>
+              Salva nickname
+            </button>
+          </>
+        )}
 
-              <input
-                value={nickname}
-                onChange={(e) =>
-                  setNickname(e.target.value)
-                }
-                placeholder="Nickname"
-              />
+        <hr />
 
-              <button onClick={salvaNickname}>
-                Salva nickname
-              </button>
-            </>
-          )}
-
-          <hr />
         <div className="section-card">
+
           <h2>Invia uno Spotted</h2>
 
           <textarea
@@ -420,16 +414,17 @@ const logout = async () => {
             onChange={(e) =>
               setSpottedText(e.target.value)
             }
+            placeholder="Scrivi il tuo spotted anonimo..."
           />
-
-          <br />
 
           <button onClick={inviaSpotted}>
             Invia Spotted
           </button>
+
         </div>
+
       </>
-      )}
+    )}
 
 {isAdmin && (
   <AdminPanel
