@@ -2,8 +2,8 @@ function CommentSection({
   post,
   comments,
   user,
-  commentText,
-  setCommentText,
+  commentInputs,
+  setCommentInputs,
   inviaCommento
 }) {
   return (
@@ -37,15 +37,18 @@ function CommentSection({
       {user && (
         <div>
           <input
-            type="text"
-            placeholder="Scrivi un commento"
-            value={commentText}
-            onChange={(e) =>
-              setCommentText(
-                e.target.value
-              )
-            }
-          />
+  type="text"
+  placeholder="Scrivi un commento"
+  value={
+    commentInputs[post.id] || ""
+  }
+  onChange={(e) =>
+    setCommentInputs({
+      ...commentInputs,
+      [post.id]: e.target.value
+    })
+  }
+/>
 
           <button
             onClick={() =>

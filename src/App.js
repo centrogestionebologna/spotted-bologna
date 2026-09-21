@@ -2,7 +2,11 @@ import Post from "./components/Post";
 import AdminPanel from "./components/AdminPanel";
 
 import { useState, useEffect } from "react";
-import { signInWithPopup } from "firebase/auth";
+import {
+  signInWithPopup,
+  onAuthStateChanged,
+  signOut
+} from "firebase/auth";
 
 import {
   doc,
@@ -30,14 +34,56 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [spottedText, setSpottedText] = useState("");
-  const [commentText, setCommentText] = useState("");
+  const [commentInputs, setCommentInputs] =
+  useState({});
 
-  useEffect(() => {
-    caricaPost();
-    caricaPendingPosts();
-    caricaCommenti();
-    caricaLike();
-  }, []);
+useEffect(() => {
+
+  caricaPost();
+  caricaPendingPosts();
+  caricaCommenti();
+  caricaLike();
+
+  onAuthStateChanged(
+    auth,
+    async (currentUser) => {
+
+      if (!currentUser) return;
+
+      setUser(currentUser);
+
+      const userRef = doc(
+        db,
+        "users",
+        currentUser.uid
+      );
+
+      const userSnap =
+        await getDoc(userRef);
+
+      if (userSnap.exists()) {
+
+        if (
+          userSnap.data().role ===
+          "admin"
+        ) {
+          setIsAdmin(true);
+        }
+
+        if (
+          userSnap.data().nickname
+        ) {
+          setSavedNickname(
+            userSnap.data().nickname
+          );
+        }
+
+      }
+
+    }
+  );
+
+}, []);
 
   const caricaLike = async () => {
     const snapshot = await getDocs(
@@ -233,29 +279,39 @@ function App() {
     caricaPendingPosts();
   };
 
-  const inviaCommento = async (postId) => {
-    if (!commentText.trim()) {
-      return;
-    }
+const inviaCommento = async (postId) => {
 
-    const userDoc = await getDoc(
-      doc(db, "users", user.uid)
-    );
+  const testo =
+    commentInputs[postId] || "";
 
-    const nicknameUtente =
-      userDoc.data().nickname;
+  if (!testo.trim()) {
+    return;
+  }
 
-    await addDoc(collection(db, "comments"), {
+  const userDoc = await getDoc(
+    doc(db, "users", user.uid)
+  );
+
+  const nicknameUtente =
+    userDoc.data().nickname;
+
+  await addDoc(
+    collection(db, "comments"),
+    {
       postId: postId,
       nickname: nicknameUtente,
-      text: commentText,
+      text: testo,
       createdAt: new Date().toISOString()
-    });
+    }
+  );
 
-    setCommentText("");
+  setCommentInputs({
+  ...commentInputs,
+  [postId]: ""
+});
 
-    caricaCommenti();
-  };
+  caricaCommenti();
+};
 
 const toggleLike = async (postId) => {
 
@@ -293,9 +349,34 @@ const toggleLike = async (postId) => {
   caricaLike();
 };
 
+const logout = async () => {
+
+  await signOut(auth);
+
+  setUser(null);
+
+  setSavedNickname("");
+
+  setIsAdmin(false);
+
+};
+
   return (
     <div style={{ padding: "20px" }}>
       <h1>SPOTTED BOLOGNA OFFICIAL</h1>
+
+{user && (
+
+  <button
+    onClick={logout}
+    style={{
+      marginBottom: "20px"
+    }}
+  >
+    Esci
+  </button>
+
+)}
 
       {!user && (
         <button onClick={loginGoogle}>
@@ -366,8 +447,8 @@ const toggleLike = async (postId) => {
   post={post}
   comments={comments}
   user={user}
-  commentText={commentText}
-  setCommentText={setCommentText}
+  commentInputs={commentInputs}
+  setCommentInputs={setCommentInputs}
   inviaCommento={inviaCommento}
   likes={likes}
   toggleLike={toggleLike}
