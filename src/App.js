@@ -1,8 +1,8 @@
 import Header from "./components/Header";
-import Post from "./components/Post";
 import AdminPanel from "./components/AdminPanel";
+import Post from "./components/Post";
 import "./App.css";
-
+import ProfileCard from "./components/ProfileCard";
 import { useState, useEffect } from "react";
 import {
   signInWithPopup,
@@ -370,6 +370,9 @@ return (
       nickname={savedNickname}
       logout={logout}
     />
+    <ProfileCard
+  nickname={savedNickname}
+/>
 
     {!user && (
       <button onClick={loginGoogle}>
@@ -378,28 +381,24 @@ return (
     )}
 
     {user && (
+  <>
+    {!savedNickname ? (
       <>
-        {savedNickname ? (
-          <h2>
-            Nickname: {savedNickname}
-          </h2>
-        ) : (
-          <>
-            <h2>Scegli nickname</h2>
+        <h2>Scegli nickname</h2>
 
-            <input
-              value={nickname}
-              onChange={(e) =>
-                setNickname(e.target.value)
-              }
-              placeholder="Nickname"
-            />
+        <input
+          value={nickname}
+          onChange={(e) =>
+            setNickname(e.target.value)
+          }
+          placeholder="Nickname"
+        />
 
-            <button onClick={salvaNickname}>
-              Salva nickname
-            </button>
-          </>
-        )}
+        <button onClick={salvaNickname}>
+          Salva nickname
+        </button>
+      </>
+    ) : null}
 
         <hr />
 

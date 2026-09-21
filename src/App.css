@@ -204,7 +204,39 @@ body {
     #050505;
 }
 
-h1 {
-  color: yellow !important;
-  font-size: 40px !important;
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 35px;
+}
+
+.header-left h1 {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 900;
+  color: #f4ea00;
+  line-height: 1;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nickname-badge {
+  background: #131313;
+  color: #f4c542;
+  border: 1px solid rgba(244,197,66,.3);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 700;
+}
+
+.logout-btn {
+  background: white;
+  color: black;
+  border-radius: 999px;
+  font-weight: 700;
 }
