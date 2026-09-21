@@ -23,40 +23,52 @@ return (
 <div className="newsletter-options">
 
   <label className="newsletter-option">
-  <input
-    type="radio"
-    name="newsletter"
-    checked={newsletter === "immediata"}
-    onChange={() =>
-      setNewsletter("immediata")
-    }
-  />
-  <span>Immediata</span>
-</label>
+    <input
+      type="radio"
+      name="newsletter"
+      checked={newsletter === "mai"}
+      onChange={() =>
+        setNewsletter("mai")
+      }
+    />
+    <span>Mai</span>
+  </label>
 
-<label className="newsletter-option">
-  <input
-    type="radio"
-    name="newsletter"
-    checked={newsletter === "giornaliera"}
-    onChange={() =>
-      setNewsletter("giornaliera")
-    }
-  />
-  <span>Giornaliera</span>
-</label>
+  <label className="newsletter-option">
+    <input
+      type="radio"
+      name="newsletter"
+      checked={newsletter === "immediata"}
+      onChange={() =>
+        setNewsletter("immediata")
+      }
+    />
+    <span>Immediata</span>
+  </label>
 
-<label className="newsletter-option">
-  <input
-    type="radio"
-    name="newsletter"
-    checked={newsletter === "settimanale"}
-    onChange={() =>
-      setNewsletter("settimanale")
-    }
-  />
-  <span>Settimanale</span>
-</label>
+  <label className="newsletter-option">
+    <input
+      type="radio"
+      name="newsletter"
+      checked={newsletter === "giornaliera"}
+      onChange={() =>
+        setNewsletter("giornaliera")
+      }
+    />
+    <span>Giornaliera</span>
+  </label>
+
+  <label className="newsletter-option">
+    <input
+      type="radio"
+      name="newsletter"
+      checked={newsletter === "settimanale"}
+      onChange={() =>
+        setNewsletter("settimanale")
+      }
+    />
+    <span>Settimanale</span>
+  </label>
 
 </div>
 
