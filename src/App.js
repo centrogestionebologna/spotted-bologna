@@ -46,10 +46,9 @@ function App() {
 useEffect(() => {
 
   caricaPost();
-  caricaPendingPosts();
   caricaCommenti();
   caricaLike();
-  caricaIscritti();
+  //caricaIscritti();
 
   onAuthStateChanged(
     auth,
@@ -58,7 +57,7 @@ useEffect(() => {
       if (!currentUser) return;
 
       setUser(currentUser);
-
+      caricaIscritti();
       const userRef = doc(
         db,
         "users",
@@ -71,11 +70,12 @@ useEffect(() => {
       if (userSnap.exists()) {
 
         if (
-          userSnap.data().role ===
-          "admin"
-        ) {
-          setIsAdmin(true);
-        }
+  userSnap.data().role ===
+  "admin"
+) {
+  setIsAdmin(true);
+  caricaPendingPosts();
+}
 
         if (
           userSnap.data().nickname
@@ -86,7 +86,7 @@ useEffect(() => {
         }
 
       }
-
+caricaIscritti();
     }
   );
 
@@ -181,6 +181,7 @@ useEffect(() => {
 
         if (userSnap.data().role === "admin") {
           setIsAdmin(true);
+          caricaPendingPosts();
         }
 
         if (userSnap.data().nickname) {
@@ -319,15 +320,13 @@ const inviaCommento = async (postId) => {
   const nicknameUtente =
     userDoc.data().nickname;
 
-  await addDoc(
-    collection(db, "comments"),
-    {
-      postId: postId,
-      nickname: nicknameUtente,
-      text: testo,
-      createdAt: new Date().toISOString()
-    }
-  );
+  await addDoc(collection(db, "comments"), {
+  postId: postId,
+  userId: user.uid,
+  nickname: nicknameUtente,
+  text: testo,
+  createdAt: new Date().toISOString()
+});
 
   setCommentInputs({
   ...commentInputs,
@@ -372,7 +371,66 @@ const toggleLike = async (postId) => {
 
   caricaLike();
 };
+const eliminaPost = async (postId) => {
 
+  const conferma = window.confirm(
+    "Vuoi davvero eliminare questo spotted?"
+  );
+
+  if (!conferma) return;
+
+  const commentiSnapshot = await getDocs(
+    collection(db, "comments")
+  );
+
+  for (const commento of commentiSnapshot.docs) {
+
+    const dati = commento.data();
+
+    if (dati.postId === postId) {
+
+      await deleteDoc(
+        doc(
+          db,
+          "comments",
+          commento.id
+        )
+      );
+
+    }
+
+  }
+
+  const likeSnapshot = await getDocs(
+    collection(db, "likes")
+  );
+
+  for (const like of likeSnapshot.docs) {
+
+    const dati = like.data();
+
+    if (dati.postId === postId) {
+
+      await deleteDoc(
+        doc(
+          db,
+          "likes",
+          like.id
+        )
+      );
+
+    }
+
+  }
+
+  await deleteDoc(
+    doc(db, "posts", postId)
+  );
+
+  caricaPost();
+  caricaCommenti();
+  caricaLike();
+};
 const logout = async () => {
 
   await signOut(auth);
@@ -410,6 +468,7 @@ return (
       nickname={savedNickname}
       logout={logout}
     />
+  {user && (
     <ProfileCard
   nickname={savedNickname}
   iscritti={numeroIscritti}
@@ -417,6 +476,7 @@ return (
   setNewsletter={setNewsletter}
   salvaNewsletter={salvaNewsletter}
 />
+)}
 
     {!user && (
       <button onClick={loginGoogle}>
@@ -492,6 +552,9 @@ return (
   inviaCommento={inviaCommento}
   likes={likes}
   toggleLike={toggleLike}
+  isAdmin={isAdmin}
+  caricaCommenti={caricaCommenti}
+  eliminaPost={eliminaPost}
 />
 ))}
     </div>

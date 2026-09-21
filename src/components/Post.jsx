@@ -9,7 +9,10 @@ function Post({
   setCommentInputs,
   inviaCommento,
   likes,
-  toggleLike
+  toggleLike,
+  isAdmin,
+  caricaCommenti, 
+  eliminaPost
 }) {
 
   const [showLikes, setShowLikes] =
@@ -18,7 +21,33 @@ function Post({
   return (
     <div className="post-card">
       <p>{post.text}</p>
+      {isAdmin && (
+  <div
+    style={{
+      textAlign: "right",
+      marginBottom: "10px"
+    }}
+  >
+    <button
+  onClick={() => {
 
+    const conferma =
+      window.confirm(
+        "Vuoi davvero eliminare questo spotted?"
+      );
+
+    if (conferma) {
+      eliminaPost(post.id);
+    }
+
+  }}
+>
+  🗑 Elimina spotted
+</button>
+  </div>
+)}
+
+{user && (
     <div className="interaction-bar">
 
   <div className="interaction-left">
@@ -38,15 +67,20 @@ function Post({
     />
 
     <button
-      className="share-btn"
-      onClick={() =>
-        navigator.clipboard.writeText(
-          window.location.href
-        )
-      }
-    >
-      ↗
-    </button>
+  className="share-btn"
+  onClick={() => {
+
+    navigator.clipboard.writeText(
+      window.location.href
+    );
+
+    alert("Link copiato!");
+
+  }}
+>
+  ↗
+</button>
+
 
   </div>
 
@@ -74,7 +108,34 @@ function Post({
   </div>
 
 </div>
+)}
 
+{!user && (
+
+  <p
+    style={{
+      color: "#cfcfcf",
+      marginTop: "15px"
+    }}
+  >
+    {likes.filter(
+      (like) =>
+        like.postId === post.id
+    ).length}
+
+    {" like - "}
+
+    {
+      comments.filter(
+        (c) =>
+          c.postId === post.id
+      ).length
+    }
+
+    {" commenti"}
+  </p>
+
+)}
 
       {showLikes && (
         <div className="like-panel">
@@ -98,6 +159,7 @@ function Post({
         </div>
       )}
 
+{user && (
       <CommentSection
   post={post}
   comments={comments}
@@ -105,7 +167,10 @@ function Post({
   commentInputs={commentInputs}
   setCommentInputs={setCommentInputs}
   inviaCommento={inviaCommento}
+  isAdmin={isAdmin}
+  caricaCommenti={caricaCommenti}
 />
+)}
     </div>
   );
 }

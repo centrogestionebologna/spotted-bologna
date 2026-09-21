@@ -11,20 +11,24 @@ function Header({
         </h1>
       </div>
 
-      <div className="header-right">
+<div className="header-right">
 
-        <div className="nickname-badge">
-          {nickname}
-        </div>
-
-        <button
-          className="logout-btn"
-          onClick={logout}
-        >
-          Esci
-        </button>
-
+  {nickname && (
+    <>
+      <div className="nickname-badge">
+        {nickname}
       </div>
+
+      <button
+        className="logout-btn"
+        onClick={logout}
+      >
+        Esci
+      </button>
+    </>
+  )}
+
+</div>
 
     </div>
   );
