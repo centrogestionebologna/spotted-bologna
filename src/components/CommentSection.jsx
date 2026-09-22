@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 function CommentSection({
@@ -20,6 +21,9 @@ const eliminaCommento = async (id) => {
   caricaCommenti();
 };
 
+const [commentiVisibili, setCommentiVisibili] =
+  useState(3);
+
   return (
     <>
       <h4>Commenti</h4>
@@ -29,6 +33,7 @@ const eliminaCommento = async (id) => {
           (commento) =>
             commento.postId === post.id
         )
+        .slice(0, commentiVisibili)
         .map((commento) => (
           <div className="comment-card">
             
@@ -76,7 +81,26 @@ const eliminaCommento = async (id) => {
 </div>
           </div>
         ))}
+{comments.filter(
+  (commento) =>
+    commento.postId === post.id
+).length > 3 && (
 
+  <button
+    onClick={() =>
+      setCommentiVisibili(
+        commentiVisibili === 3
+          ? 999
+          : 3
+      )
+    }
+  >
+    {commentiVisibili === 3
+      ? "Mostra altri commenti"
+      : "Mostra meno"}
+  </button>
+
+)}
       {user && (
         <div>
           <input

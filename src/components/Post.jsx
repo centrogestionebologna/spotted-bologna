@@ -21,6 +21,19 @@ function Post({
   return (
     <div className="post-card">
       <p>{post.text}</p>
+
+{post.createdAt && (
+  <p
+    style={{
+      fontSize: "12px",
+      color: "#999",
+      marginTop: "8px"
+    }}
+  >
+    {new Date(post.createdAt)
+      .toLocaleDateString("it-IT")}
+  </p>
+)}
       {isAdmin && (
   <div
     style={{
@@ -137,8 +150,8 @@ function Post({
 
 )}
 
-      {showLikes && (
-        <div className="like-panel">
+      {user && showLikes && (
+  <div className="like-panel">
           <strong>
             Hanno messo like:
           </strong>

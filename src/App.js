@@ -35,12 +35,25 @@ function App() {
   const [likes, setLikes] = useState([]);
   const [numeroIscritti, setNumeroIscritti] =
   useState(0);
+  const [postVisibili, setPostVisibili] =
+  useState(10);
+  const [utentiVisibili, setUtentiVisibili] =
+  useState(10);
+  const [paroleVietate, setParoleVietate] =
+  useState([]);
+
+  const [nuovaParola, setNuovaParola] =
+  useState("");
 
   const [newsletter, setNewsletter] =
   useState("mai");
+  const [ultimoInvio, setUltimoInvio] =
+  useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
   const [ricercaUtente, setRicercaUtente] =
     useState("");
+  const [ricercaSpotted, setRicercaSpotted] =
+  useState("");
   const [spottedText, setSpottedText] = useState("");
   const [commentInputs, setCommentInputs] =
   useState({});
@@ -51,7 +64,6 @@ useEffect(() => {
   caricaPost();
   caricaCommenti();
   caricaLike();
-  caricaUtenti();
 
   onAuthStateChanged(
     auth,
@@ -61,7 +73,6 @@ useEffect(() => {
 
       setUser(currentUser);
       caricaIscritti();
-      caricaUtenti();
       const userRef = doc(
         db,
         "users",
@@ -71,34 +82,46 @@ useEffect(() => {
       const userSnap =
         await getDoc(userRef);
 
-      if (userSnap.exists()) {
-if (userSnap.data().banned) {
+if (userSnap.exists()) {
 
-  await signOut(auth);
+  if (userSnap.data().banned) {
 
-  alert(
-    "Il tuo account è stato sospeso."
-  );
+    await signOut(auth);
 
-  return;
-}
-        if (
+    alert(
+      "Il tuo account è stato sospeso."
+    );
+
+    return;
+  }
+
+  if (
   userSnap.data().role ===
   "admin"
 ) {
   setIsAdmin(true);
   caricaPendingPosts();
+  caricaUtenti();
+  caricaParoleVietate();
 }
 
-        if (
-          userSnap.data().nickname
-        ) {
-          setSavedNickname(
-            userSnap.data().nickname
-          );
-        }
+  if (
+    userSnap.data().nickname
+  ) {
+    setSavedNickname(
+      userSnap.data().nickname
+    );
+  }
 
-      }
+  if (
+    userSnap.data().newsletter
+  ) {
+    setNewsletter(
+      userSnap.data().newsletter
+    );
+  }
+
+}
 caricaIscritti();
 caricaUtenti();
     }
@@ -149,6 +172,24 @@ const caricaUtenti = async () => {
   setUtenti(lista);
 };
 
+const caricaParoleVietate = async () => {
+
+  const snapshot = await getDocs(
+    collection(db, "bannedWords")
+  );
+
+  const lista = [];
+
+  snapshot.forEach((docu) => {
+    lista.push({
+      id: docu.id,
+      ...docu.data()
+    });
+  });
+
+  setParoleVietate(lista);
+};
+
   const caricaPost = async () => {
     const snapshot = await getDocs(collection(db, "posts"));
 
@@ -161,7 +202,13 @@ const caricaUtenti = async () => {
       });
     });
 
-    setPosts(lista);
+    lista.sort(
+  (a, b) =>
+    new Date(b.createdAt || 0) -
+    new Date(a.createdAt || 0)
+);
+
+setPosts(lista);
   };
 
   const caricaPendingPosts = async () => {
@@ -219,10 +266,18 @@ const caricaUtenti = async () => {
 
   return;
 }
-        if (userSnap.data().role === "admin") {
-          setIsAdmin(true);
-          caricaPendingPosts();
-        }
+if (
+  userSnap.data().role ===
+  "admin"
+) {
+  setIsAdmin(true);
+
+  caricaPendingPosts();
+
+  caricaUtenti();
+
+  caricaParoleVietate();
+}
 
         if (userSnap.data().nickname) {
           setSavedNickname(
@@ -300,18 +355,73 @@ const caricaUtenti = async () => {
     alert("Nickname salvato!");
   };
 
-  const inviaSpotted = async () => {
-    if (spottedText.trim() === "") {
-      alert("Scrivi un messaggio");
-      return;
-    }
+const inviaSpotted = async () => {
+
+  const adesso = Date.now();
+
+  if (
+    adesso - ultimoInvio < 30000
+  ) {
+
+    alert(
+      "Attendi 30 secondi prima di inviare un altro spotted."
+    );
+
+    return;
+  }
+
+  if (spottedText.trim() === "") {
+
+    alert("Scrivi un messaggio");
+
+    return;
+  }
+
+  if (spottedText.length < 10) {
+
+    alert(
+      "Lo spotted deve contenere almeno 10 caratteri"
+    );
+
+    return;
+  }
+
+  if (spottedText.length > 1000) {
+
+    alert(
+      "Massimo 1000 caratteri"
+    );
+
+    return;
+  }
+
+const testo =
+  spottedText.toLowerCase();
+
+const contieneParolaVietata =
+  paroleVietate.some(
+    (parola) =>
+      testo.includes(
+        parola.word.toLowerCase()
+      )
+  );
+
+if (contieneParolaVietata) {
+
+  alert(
+    "Il testo contiene parole non consentite."
+  );
+
+  return;
+}
 
     await addDoc(collection(db, "pendingPosts"), {
-      text: spottedText,
-      authorId: user.uid,
-      createdAt: new Date().toISOString(),
-      status: "pending"
-    });
+  text: spottedText,
+  authorId: user ? user.uid : "anonimo",
+  createdAt: new Date().toISOString(),
+  status: "pending"
+});
+setUltimoInvio(Date.now());
 
     alert("Spotted inviato per approvazione");
 
@@ -322,11 +432,12 @@ const caricaUtenti = async () => {
 
   const approvaPost = async (post) => {
     await addDoc(collection(db, "posts"), {
-      text: post.text,
-      likes: 0,
-      comments: 0,
-      author: "admin"
-    });
+  text: post.text,
+  likes: 0,
+  comments: 0,
+  author: "admin",
+  createdAt: new Date().toISOString()
+});
 
     await deleteDoc(
       doc(db, "pendingPosts", post.id)
@@ -514,6 +625,58 @@ const salvaNewsletter = async () => {
 
 };
 
+const aggiungiParolaVietata =
+async () => {
+
+  if (!nuovaParola.trim()) {
+    return;
+  }
+
+const esisteGia =
+  paroleVietate.some(
+    (parola) =>
+      parola.word.toLowerCase() ===
+      nuovaParola.toLowerCase()
+  );
+
+if (esisteGia) {
+
+  alert(
+    "Questa parola è già presente."
+  );
+
+  return;
+}
+
+  await addDoc(
+    collection(db, "bannedWords"),
+    {
+      word:
+        nuovaParola.toLowerCase()
+    }
+  );
+
+  setNuovaParola("");
+
+  caricaParoleVietate();
+
+};
+
+const eliminaParolaVietata =
+async (id) => {
+
+  await deleteDoc(
+    doc(
+      db,
+      "bannedWords",
+      id
+    )
+  );
+
+  caricaParoleVietate();
+
+};
+
 return (
   <div className="app-container">
 
@@ -521,14 +684,14 @@ return (
       nickname={savedNickname}
       logout={logout}
     />
-  {user && (
-    <ProfileCard
-  nickname={savedNickname}
-  iscritti={numeroIscritti}
-  newsletter={newsletter}
-  setNewsletter={setNewsletter}
-  salvaNewsletter={salvaNewsletter}
-/>
+  {user && savedNickname && (
+  <ProfileCard
+    nickname={savedNickname}
+    iscritti={numeroIscritti}
+    newsletter={newsletter}
+    setNewsletter={setNewsletter}
+    salvaNewsletter={salvaNewsletter}
+  />
 )}
 
     {!user && (
@@ -537,52 +700,56 @@ return (
       </button>
     )}
 
-    {user && (
-  <>
-    {!savedNickname ? (
-      <>
-        <h2>Scegli nickname</h2>
+{user && !savedNickname && (
+  <div className="section-card">
 
-        <input
-          value={nickname}
-          onChange={(e) =>
-            setNickname(e.target.value)
-          }
-          placeholder="Nickname"
-        />
+    <h2>Scegli nickname</h2>
 
-        <button onClick={salvaNickname}>
-          Salva nickname
-        </button>
-      </>
-    ) : null}
+    <input
+      value={nickname}
+      onChange={(e) =>
+        setNickname(e.target.value)
+      }
+      placeholder="Nickname"
+    />
 
-        <hr />
+    <button onClick={salvaNickname}>
+      Salva nickname
+    </button>
 
-        <div className="section-card">
+  </div>
+)}
 
-          <h2>Invia uno Spotted</h2>
+<div className="section-card">
 
-          <textarea
-            rows="4"
-            cols="50"
-            value={spottedText}
-            onChange={(e) =>
-              setSpottedText(e.target.value)
-            }
-            placeholder="Scrivi il tuo spotted anonimo..."
-          />
+  <h2>📩 Invia uno Spotted</h2>
 
-          <button onClick={inviaSpotted}>
-            Invia Spotted
-          </button>
+<textarea
+  rows="4"
+  cols="50"
+  value={spottedText}
+  onChange={(e) =>
+    setSpottedText(e.target.value)
+  }
+  placeholder="Scrivi il tuo spotted anonimo..."
+/>
 
-        </div>
+<p
+  style={{
+    fontSize: "12px",
+    color: "#999"
+  }}
+>
+  {spottedText.length}/1000
+</p>
 
-      </>
-    )}
+  <button onClick={inviaSpotted}>
+    Invia Spotted
+  </button>
 
-{isAdmin && (
+</div>
+
+{user && savedNickname && isAdmin && (
   <>
     <AdminPanel
       pendingPosts={pendingPosts}
@@ -593,10 +760,55 @@ return (
     <div className="admin-dashboard">
 
       <h2>👥 Dashboard Community</h2>
-
+      <p>
+        📩 Da approvare: {pendingPosts.length}
+      </p>
       <p>
         Totale utenti registrati: {utenti.length}
       </p>
+      <hr />
+
+<h3>🚫 Parole vietate</h3>
+
+<input
+  type="text"
+  placeholder="Nuova parola vietata"
+  value={nuovaParola}
+  onChange={(e) =>
+    setNuovaParola(e.target.value)
+  }
+/>
+
+<button
+  onClick={aggiungiParolaVietata}
+>
+  Aggiungi
+</button>
+
+{paroleVietate.map((parola) => (
+  <div
+    key={parola.id}
+    style={{
+      marginTop: "10px"
+    }}
+  >
+    {parola.word}
+
+    <button
+      style={{
+        marginLeft: "10px"
+      }}
+      onClick={() =>
+        eliminaParolaVietata(
+          parola.id
+        )
+      }
+    >
+      Elimina
+    </button>
+  </div>
+))}
+
 <input
   type="text"
   placeholder="Cerca nickname o email..."
@@ -621,6 +833,7 @@ return (
         .includes(ricerca)
     );
   })
+  .slice(0, utentiVisibili)
   .map((utente) => (
         <div
   key={utente.id}
@@ -643,7 +856,11 @@ return (
 
   <p>
     <strong>Registrato il:</strong>{" "}
-    {utente.createdAt}
+    {utente.createdAt
+  ? new Date(
+      utente.createdAt
+    ).toLocaleDateString("it-IT")
+  : "-"}
   </p>
 
   <p>
@@ -670,31 +887,71 @@ return (
 
 </div>
       ))}
-
+{utenti.length > utentiVisibili && (
+  <button
+    onClick={() =>
+      setUtentiVisibili(
+        utentiVisibili + 10
+      )
+    }
+  >
+    Mostra altri utenti
+  </button>
+)}
     </div>
   </>
 )}
 
-      <hr />
+<hr />
 
-      <h2>Spotted pubblicati</h2>
-
-{posts.map((post) => (
-  <Post
-  key={post.id}
-  post={post}
-  comments={comments}
-  user={user}
-  commentInputs={commentInputs}
-  setCommentInputs={setCommentInputs}
-  inviaCommento={inviaCommento}
-  likes={likes}
-  toggleLike={toggleLike}
-  isAdmin={isAdmin}
-  caricaCommenti={caricaCommenti}
-  eliminaPost={eliminaPost}
+<h2>Spotted pubblicati</h2>
+{isAdmin && (
+<input
+type="text"
+placeholder="Cerca negli spotted..."
+value={ricercaSpotted}
+onChange={(e) =>
+setRicercaSpotted(e.target.value)
+}
 />
+)}
+{posts
+  .filter((post) =>
+    post.text
+      .toLowerCase()
+      .includes(
+        ricercaSpotted.toLowerCase()
+      )
+  )
+  .slice(0, postVisibili)
+  .map((post) => (
+  <Post
+    key={post.id}
+    post={post}
+    comments={comments}
+    user={user}
+    commentInputs={commentInputs}
+    setCommentInputs={setCommentInputs}
+    inviaCommento={inviaCommento}
+    likes={likes}
+    toggleLike={toggleLike}
+    isAdmin={isAdmin}
+    caricaCommenti={caricaCommenti}
+    eliminaPost={eliminaPost}
+  />
 ))}
+
+{posts.length > postVisibili && (
+  <button
+    onClick={() =>
+      setPostVisibili(
+        postVisibili + 10
+      )
+    }
+  >
+    Mostra altri spotted
+  </button>
+)}
     </div>
   );
 }
