@@ -45,6 +45,7 @@ function App() {
   const [commentInputs, setCommentInputs] =
   useState({});
 
+// eslint-disable-next-line react-hooks/exhaustive-deps
 useEffect(() => {
 
   caricaPost();
@@ -99,7 +100,7 @@ if (userSnap.data().banned) {
 
       }
 caricaIscritti();
-caricaUtenti();;
+caricaUtenti();
     }
   );
 
@@ -131,20 +132,7 @@ caricaUtenti();;
 
 };
 const caricaUtenti = async () => {
-const toggleBan = async (
-  uid,
-  statoAttuale
-) => {
 
-  await updateDoc(
-    doc(db, "users", uid),
-    {
-      banned: !statoAttuale
-    }
-  );
-
-  caricaUtenti();
-};
   const snapshot = await getDocs(
     collection(db, "users")
   );
