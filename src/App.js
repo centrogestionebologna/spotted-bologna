@@ -17,7 +17,8 @@ import {
   getDocs,
   collection,
   addDoc,
-  deleteDoc
+  deleteDoc,
+  updateDoc
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
@@ -27,7 +28,7 @@ function App() {
   const [savedNickname, setSavedNickname] = useState("");
 
   const [user, setUser] = useState(null);
-
+  const [utenti, setUtenti] = useState([]);
   const [posts, setPosts] = useState([]);
   const [pendingPosts, setPendingPosts] = useState([]);
   const [comments, setComments] = useState([]);
@@ -36,9 +37,10 @@ function App() {
   useState(0);
 
   const [newsletter, setNewsletter] =
-  useState("giornaliera");
+  useState("mai");
   const [isAdmin, setIsAdmin] = useState(false);
-
+  const [ricercaUtente, setRicercaUtente] =
+    useState("");
   const [spottedText, setSpottedText] = useState("");
   const [commentInputs, setCommentInputs] =
   useState({});
@@ -48,7 +50,7 @@ useEffect(() => {
   caricaPost();
   caricaCommenti();
   caricaLike();
-  //caricaIscritti();
+  caricaUtenti();
 
   onAuthStateChanged(
     auth,
@@ -58,6 +60,7 @@ useEffect(() => {
 
       setUser(currentUser);
       caricaIscritti();
+      caricaUtenti();
       const userRef = doc(
         db,
         "users",
@@ -68,7 +71,16 @@ useEffect(() => {
         await getDoc(userRef);
 
       if (userSnap.exists()) {
+if (userSnap.data().banned) {
 
+  await signOut(auth);
+
+  alert(
+    "Il tuo account è stato sospeso."
+  );
+
+  return;
+}
         if (
   userSnap.data().role ===
   "admin"
@@ -87,6 +99,7 @@ useEffect(() => {
 
       }
 caricaIscritti();
+caricaUtenti();;
     }
   );
 
@@ -116,6 +129,36 @@ caricaIscritti();
 
   setNumeroIscritti(snapshot.size);
 
+};
+const caricaUtenti = async () => {
+const toggleBan = async (
+  uid,
+  statoAttuale
+) => {
+
+  await updateDoc(
+    doc(db, "users", uid),
+    {
+      banned: !statoAttuale
+    }
+  );
+
+  caricaUtenti();
+};
+  const snapshot = await getDocs(
+    collection(db, "users")
+  );
+
+  const lista = [];
+
+  snapshot.forEach((docu) => {
+    lista.push({
+      id: docu.id,
+      ...docu.data()
+    });
+  });
+
+  setUtenti(lista);
 };
 
   const caricaPost = async () => {
@@ -178,7 +221,16 @@ caricaIscritti();
       const userSnap = await getDoc(userRef);
 
       if (userSnap.exists()) {
+      if (userSnap.data().banned) {
 
+  alert(
+    "Il tuo account è stato sospeso."
+  );
+
+  await signOut(auth);
+
+  return;
+}
         if (userSnap.data().role === "admin") {
           setIsAdmin(true);
           caricaPendingPosts();
@@ -442,7 +494,20 @@ const logout = async () => {
   setIsAdmin(false);
 
 };
+const toggleBan = async (
+  uid,
+  statoAttuale
+) => {
 
+  await updateDoc(
+    doc(db, "users", uid),
+    {
+      banned: !statoAttuale
+    }
+  );
+
+  caricaUtenti();
+};
 const salvaNewsletter = async () => {
 
   if (!user) return;
@@ -530,11 +595,96 @@ return (
     )}
 
 {isAdmin && (
-  <AdminPanel
-  pendingPosts={pendingPosts}
-  approvaPost={approvaPost}
-  rifiutaPost={rifiutaPost}
+  <>
+    <AdminPanel
+      pendingPosts={pendingPosts}
+      approvaPost={approvaPost}
+      rifiutaPost={rifiutaPost}
+    />
+
+    <div className="admin-dashboard">
+
+      <h2>👥 Dashboard Community</h2>
+
+      <p>
+        Totale utenti registrati: {utenti.length}
+      </p>
+<input
+  type="text"
+  placeholder="Cerca nickname o email..."
+  value={ricercaUtente}
+  onChange={(e) =>
+    setRicercaUtente(e.target.value)
+  }
 />
+      {utenti
+  .filter((utente) => {
+
+    const ricerca =
+      ricercaUtente.toLowerCase();
+
+    return (
+      (utente.nickname || "")
+        .toLowerCase()
+        .includes(ricerca) ||
+
+      (utente.email || "")
+        .toLowerCase()
+        .includes(ricerca)
+    );
+  })
+  .map((utente) => (
+        <div
+  key={utente.id}
+  className="user-card"
+>
+  <p>
+    <strong>Nickname:</strong>{" "}
+    {utente.nickname || "Non impostato"}
+  </p>
+
+  <p>
+    <strong>Email:</strong>{" "}
+    {utente.email}
+  </p>
+
+  <p>
+    <strong>Ruolo:</strong>{" "}
+    {utente.role}
+  </p>
+
+  <p>
+    <strong>Registrato il:</strong>{" "}
+    {utente.createdAt}
+  </p>
+
+  <p>
+    <strong>Stato:</strong>{" "}
+    {utente.banned
+      ? "🔴 Bannato"
+      : "🟢 Attivo"}
+  </p>
+
+  {utente.role !== "admin" && (
+    <button
+      onClick={() =>
+        toggleBan(
+          utente.uid,
+          utente.banned
+        )
+      }
+    >
+      {utente.banned
+        ? "✅ Sblocca"
+        : "🚫 Banna"}
+    </button>
+  )}
+
+</div>
+      ))}
+
+    </div>
+  </>
 )}
 
       <hr />
