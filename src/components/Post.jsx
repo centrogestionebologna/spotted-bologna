@@ -10,6 +10,7 @@ function Post({
   inviaCommento,
   likes,
   toggleLike,
+  segnalaPost,
   isAdmin,
   caricaCommenti, 
   eliminaPost
@@ -78,6 +79,14 @@ function Post({
         toggleLike(post.id)
       }
     />
+
+<button
+onClick={() =>
+segnalaPost(post.id)
+}
+>
+🚩
+</button>
 
     <button
   className="share-btn"

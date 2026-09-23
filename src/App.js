@@ -57,6 +57,8 @@ function App() {
   const [spottedText, setSpottedText] = useState("");
   const [commentInputs, setCommentInputs] =
   useState({});
+  const [approvalEnabled, setApprovalEnabled] =
+  useState(true);
 
 // eslint-disable-next-line react-hooks/exhaustive-deps
 useEffect(() => {
@@ -64,6 +66,7 @@ useEffect(() => {
   caricaPost();
   caricaCommenti();
   caricaLike();
+  caricaImpostazioni();
 
   onAuthStateChanged(
     auth,
@@ -190,7 +193,21 @@ const caricaParoleVietate = async () => {
   setParoleVietate(lista);
 };
 
-  const caricaPost = async () => {
+const caricaImpostazioni = async () => {
+
+  const snap = await getDoc(
+    doc(db, "settings", "general")
+  );
+
+  if (snap.exists()) {
+    setApprovalEnabled(
+      snap.data().approvalEnabled
+    );
+  }
+
+};
+
+const caricaPost = async () => {
     const snapshot = await getDocs(collection(db, "posts"));
 
     const lista = [];
@@ -415,12 +432,35 @@ if (contieneParolaVietata) {
   return;
 }
 
-    await addDoc(collection(db, "pendingPosts"), {
+const nuovoPost = {
   text: spottedText,
   authorId: user ? user.uid : "anonimo",
   createdAt: new Date().toISOString(),
-  status: "pending"
-});
+  status: "pending",
+  reports: 0,
+  reportedBy: []
+};
+
+if (approvalEnabled) {
+
+  await addDoc(
+    collection(db, "pendingPosts"),
+    nuovoPost
+  );
+
+  alert("Spotted inviato per approvazione");
+
+} else {
+
+  await addDoc(
+    collection(db, "posts"),
+    nuovoPost
+  );
+
+  alert("Spotted pubblicato");
+
+}
+
 setUltimoInvio(Date.now());
 
     alert("Spotted inviato per approvazione");
@@ -522,6 +562,77 @@ const toggleLike = async (postId) => {
 
   caricaLike();
 };
+
+const segnalaPost = async (postId) => {
+const conferma = window.confirm(
+  "Vuoi davvero segnalare questo spotted?"
+);
+
+if (!conferma) {
+  return;
+}
+  if (!user) {
+    alert("Devi essere registrato.");
+    return;
+  }
+
+  const postRef = doc(db, "posts", postId);
+
+  const postSnap = await getDoc(postRef);
+
+  if (!postSnap.exists()) return;
+
+  const dati = postSnap.data();
+
+  if (
+    dati.reportedBy &&
+    dati.reportedBy.includes(user.uid)
+  ) {
+
+    alert("Hai già segnalato questo spotted.");
+
+    return;
+  }
+
+  const nuoviReport =
+    (dati.reports || 0) + 1;
+
+  const nuoviSegnalatori = [
+    ...(dati.reportedBy || []),
+    user.uid
+  ];
+
+  await updateDoc(postRef, {
+    reports: nuoviReport,
+    reportedBy: nuoviSegnalatori
+  });
+alert("Segnalazione inviata.");
+  if (nuoviReport >= 3) {
+
+    await addDoc(
+      collection(db, "pendingPosts"),
+      {
+        ...dati,
+        reports: nuoviReport,
+        reportedBy: nuoviSegnalatori,
+        flagReason: "Segnalato dalla community"
+      }
+    );
+
+    await deleteDoc(postRef);
+
+    alert(
+      "Lo spotted è stato rimosso e inviato alla moderazione."
+    );
+
+    caricaPost();
+    caricaPendingPosts();
+
+  }
+
+};
+
+
 const eliminaPost = async (postId) => {
 
   const conferma = window.confirm(
@@ -607,6 +718,23 @@ const toggleBan = async (
 
   caricaUtenti();
 };
+
+const toggleApproval = async () => {
+
+  await updateDoc(
+    doc(db, "settings", "general"),
+    {
+      approvalEnabled:
+        !approvalEnabled
+    }
+  );
+
+  setApprovalEnabled(
+    !approvalEnabled
+  );
+
+};
+
 const salvaNewsletter = async () => {
 
   if (!user) return;
@@ -720,6 +848,8 @@ return (
   </div>
 )}
 
+{user && !savedNickname ? null : (
+
 <div className="section-card">
 
   <h2>📩 Invia uno Spotted</h2>
@@ -748,6 +878,7 @@ return (
   </button>
 
 </div>
+)}
 
 {user && savedNickname && isAdmin && (
   <>
@@ -760,6 +891,13 @@ return (
     <div className="admin-dashboard">
 
       <h2>👥 Dashboard Community</h2>
+      <button onClick={toggleApproval}>
+
+  {approvalEnabled
+    ? "✅ Approvazione attiva"
+    : "⚡ Pubblicazione automatica"}
+
+  </button>
       <p>
         📩 Da approvare: {pendingPosts.length}
       </p>
@@ -938,6 +1076,7 @@ setRicercaSpotted(e.target.value)
     isAdmin={isAdmin}
     caricaCommenti={caricaCommenti}
     eliminaPost={eliminaPost}
+    segnalaPost={segnalaPost}
   />
 ))}
 
