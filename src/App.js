@@ -450,6 +450,8 @@ if (approvalEnabled) {
 
   alert("Spotted inviato per approvazione");
 
+  caricaPendingPosts();
+
 } else {
 
   await addDoc(
@@ -459,16 +461,15 @@ if (approvalEnabled) {
 
   alert("Spotted pubblicato");
 
+  caricaPost();
+
 }
 
 setUltimoInvio(Date.now());
 
-    alert("Spotted inviato per approvazione");
+setSpottedText("");
+};
 
-    setSpottedText("");
-
-    caricaPendingPosts();
-  };
 
   const approvaPost = async (post) => {
     await addDoc(collection(db, "posts"), {
@@ -849,6 +850,7 @@ return (
 )}
 
 {user && !savedNickname ? null : (
+<>
 
 <div className="section-card">
 
@@ -878,7 +880,6 @@ return (
   </button>
 
 </div>
-)}
 
 {user && savedNickname && isAdmin && (
   <>
@@ -1040,6 +1041,7 @@ return (
   </>
 )}
 
+
 <hr />
 
 <h2>Spotted pubblicati</h2>
@@ -1091,6 +1093,10 @@ setRicercaSpotted(e.target.value)
     Mostra altri spotted
   </button>
 )}
+
+</>
+)}
+
     </div>
   );
 }
