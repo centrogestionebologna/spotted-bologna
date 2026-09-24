@@ -172,6 +172,12 @@ const caricaUtenti = async () => {
     });
   });
 
+lista.sort(
+  (a, b) =>
+    new Date(b.createdAt || 0) -
+    new Date(a.createdAt || 0)
+);
+
   setUtenti(lista);
 };
 
@@ -565,13 +571,7 @@ const toggleLike = async (postId) => {
 };
 
 const segnalaPost = async (postId) => {
-const conferma = window.confirm(
-  "Vuoi davvero segnalare questo spotted?"
-);
 
-if (!conferma) {
-  return;
-}
   if (!user) {
     alert("Devi essere registrato.");
     return;
@@ -590,8 +590,29 @@ if (!conferma) {
     dati.reportedBy.includes(user.uid)
   ) {
 
-    alert("Hai già segnalato questo spotted.");
+    const nuoviSegnalatori =
+      dati.reportedBy.filter(
+        (id) => id !== user.uid
+      );
 
+    await updateDoc(postRef, {
+      reports: Math.max(
+        (dati.reports || 1) - 1,
+        0
+      ),
+      reportedBy: nuoviSegnalatori
+    });
+
+    caricaPost();
+
+    return;
+  }
+
+  const conferma = window.confirm(
+    "Vuoi davvero segnalare questo spotted?"
+  );
+
+  if (!conferma) {
     return;
   }
 
@@ -607,7 +628,9 @@ if (!conferma) {
     reports: nuoviReport,
     reportedBy: nuoviSegnalatori
   });
-alert("Segnalazione inviata.");
+
+  caricaPost();
+
   if (nuoviReport >= 3) {
 
     await addDoc(
@@ -616,7 +639,8 @@ alert("Segnalazione inviata.");
         ...dati,
         reports: nuoviReport,
         reportedBy: nuoviSegnalatori,
-        flagReason: "Segnalato dalla community"
+        flagReason:
+          "Segnalato dalla community"
       }
     );
 
@@ -628,9 +652,7 @@ alert("Segnalazione inviata.");
 
     caricaPost();
     caricaPendingPosts();
-
   }
-
 };
 
 
@@ -889,7 +911,18 @@ return (
       rifiutaPost={rifiutaPost}
     />
 
-    <div className="admin-dashboard">
+    <details className="admin-dashboard">
+
+  <summary
+    style={{
+      cursor: "pointer",
+      fontSize: "22px",
+      fontWeight: "bold",
+      marginBottom: "15px"
+    }}
+  >
+    👥 Dashboard Community
+  </summary>
 
       <h2>👥 Dashboard Community</h2>
       <button onClick={toggleApproval}>
@@ -1037,7 +1070,7 @@ return (
     Mostra altri utenti
   </button>
 )}
-    </div>
+    </details>
   </>
 )}
 

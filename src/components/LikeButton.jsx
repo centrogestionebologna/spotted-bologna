@@ -4,7 +4,7 @@ function LikeButton({
 }) {
   return (
     <button onClick={onToggleLike}>
-      {liked ? "❤️ Like" : "🤍 Like"}
+      {liked ? "❤️" : "🤍"}
     </button>
   );
 }

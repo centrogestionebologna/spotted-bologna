@@ -3,39 +3,51 @@ function AdminPanel({
   approvaPost,
   rifiutaPost
 }) {
-  return (
-    <div>
-      <hr />
+return (
+  <details>
+    <summary
+      style={{
+        cursor: "pointer",
+        fontSize: "22px",
+        fontWeight: "bold",
+        marginTop: "20px",
+        marginBottom: "15px"
+      }}
+    >
+      📋 Pannello Admin ({pendingPosts.length})
+    </summary>
 
-      <h2>Pannello Admin</h2>
+    {pendingPosts.map((post) => (
+      <div
+        key={post.id}
+        style={{
+          border: "2px solid orange",
+          padding: "10px",
+          marginBottom: "10px"
+        }}
+      >
+        <p>{post.text}</p>
 
-      {pendingPosts.map((post) => (
-        <div
-          key={post.id}
+        <button
+          onClick={() => approvaPost(post)}
+        >
+          ✅ Approva
+        </button>
+
+        <button
+          onClick={() =>
+            rifiutaPost(post.id)
+          }
           style={{
-            border: "2px solid orange",
-            padding: "10px",
-            marginBottom: "10px"
+            marginLeft: "10px"
           }}
         >
-          <p>{post.text}</p>
-
-          <button
-            onClick={() => approvaPost(post)}
-          >
-            ✅ Approva
-          </button>
-
-          <button
-            onClick={() => rifiutaPost(post.id)}
-            style={{ marginLeft: "10px" }}
-          >
-            ❌ Rifiuta
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+          ❌ Rifiuta
+        </button>
+      </div>
+    ))}
+  </details>
+);
 }
 
 export default AdminPanel;

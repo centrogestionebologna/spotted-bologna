@@ -1,5 +1,4 @@
 import { useState } from "react";
-import LikeButton from "./LikeButton";
 import CommentSection from "./CommentSection";
 function Post({
   post,
@@ -66,44 +65,6 @@ function Post({
 
   <div className="interaction-left">
 
-    <LikeButton
-      liked={
-        likes.some(
-          (like) =>
-            like.postId === post.id &&
-            user &&
-            like.userId === user.uid
-        )
-      }
-      onToggleLike={() =>
-        toggleLike(post.id)
-      }
-    />
-
-<button
-onClick={() =>
-segnalaPost(post.id)
-}
->
-🚩
-</button>
-
-    <button
-  className="share-btn"
-  onClick={() => {
-
-    navigator.clipboard.writeText(
-      window.location.href
-    );
-
-    alert("Link copiato!");
-
-  }}
->
-  ↗
-</button>
-
-
   </div>
 
   <div
@@ -159,30 +120,23 @@ segnalaPost(post.id)
 
 )}
 
-      {user && showLikes && (
-  <div className="like-panel">
-          <strong>
-            Hanno messo like:
-          </strong>
+{user && showLikes && (
+  <div
+    className="like-panel"
+    style={{
+      marginBottom: "20px"
+    }}
+  >
+    <strong>
+      Hanno messo like:
+    </strong>
 
-          {likes
-            .filter(
-              (like) =>
-                like.postId === post.id
-            )
-            .map((like) => (
-              <div
-  key={like.id}
-  className="like-user"
->
-  {like.nickname}
-</div>
-            ))}
-        </div>
-      )}
+    ...
+  </div>
+)}
 
 {user && (
-      <CommentSection
+<CommentSection
   post={post}
   comments={comments}
   user={user}
@@ -191,6 +145,9 @@ segnalaPost(post.id)
   inviaCommento={inviaCommento}
   isAdmin={isAdmin}
   caricaCommenti={caricaCommenti}
+  likes={likes}
+  toggleLike={toggleLike}
+  segnalaPost={segnalaPost}
 />
 )}
     </div>
