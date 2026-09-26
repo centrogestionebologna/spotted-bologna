@@ -28,6 +28,9 @@ const eliminaCommento = async (id) => {
 const [commentiVisibili, setCommentiVisibili] =
   useState(3);
 
+const giaSegnalato =
+  post.reportedBy?.includes(user?.uid);
+
   return (
     <>
       <h4>Commenti</h4>
@@ -151,12 +154,12 @@ const [commentiVisibili, setCommentiVisibili] =
   }
   style={{
     backgroundColor:
-      post.reportedBy?.includes(user.uid)
+      giaSegnalato
         ? "#d32f2f"
         : "white",
 
     color:
-      post.reportedBy?.includes(user.uid)
+      giaSegnalato
         ? "white"
         : "black"
   }}

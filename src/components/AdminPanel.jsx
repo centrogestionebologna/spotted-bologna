@@ -28,6 +28,27 @@ return (
       >
         <p>{post.text}</p>
 
+{post.reports > 0 && (
+  <p
+    style={{
+      color: "#ff9800",
+      fontWeight: "bold"
+    }}
+  >
+    🚩 Segnalazioni: {post.reports}
+  </p>
+)}
+
+{post.flagReason && (
+  <p
+    style={{
+      color: "#ff9800"
+    }}
+  >
+    🚩 {post.flagReason}
+  </p>
+)}
+
         <button
           onClick={() => approvaPost(post)}
         >

@@ -26,7 +26,21 @@ import { auth, provider, db } from "./firebase";
 function App() {
   const [nickname, setNickname] = useState("");
   const [savedNickname, setSavedNickname] = useState("");
+  const [gruppi, setGruppi] =
+  useState([]);
+  const [nomeGruppo, setNomeGruppo] =
+  useState("");
 
+  const [
+  descrizioneGruppo,
+  setDescrizioneGruppo
+  ] = useState("");
+
+  const [fotoGruppo, setFotoGruppo] =
+  useState("");
+
+  const [linkGruppo, setLinkGruppo] =
+  useState("");
   const [user, setUser] = useState(null);
   const [utenti, setUtenti] = useState([]);
   const [posts, setPosts] = useState([]);
@@ -37,6 +51,10 @@ function App() {
   useState(0);
   const [postVisibili, setPostVisibili] =
   useState(10);
+  const [
+  postScreenshotVisibili,
+  setPostScreenshotVisibili
+  ] = useState(10); 
   const [utentiVisibili, setUtentiVisibili] =
   useState(10);
   const [paroleVietate, setParoleVietate] =
@@ -67,7 +85,7 @@ useEffect(() => {
   caricaCommenti();
   caricaLike();
   caricaImpostazioni();
-
+  caricaGruppi();
   onAuthStateChanged(
     auth,
     async (currentUser) => {
@@ -320,13 +338,14 @@ if (
 
       if (!userSnap.exists()) {
         await setDoc(userRef, {
-          uid: currentUser.uid,
-          name: currentUser.displayName,
-          email: currentUser.email,
-          role: "user",
-          nickname: "",
-          createdAt: new Date().toISOString()
-        });
+  uid: currentUser.uid,
+  name: currentUser.displayName,
+  email: currentUser.email,
+  role: "user",
+  nickname: "",
+  newsletter: "mai",
+  createdAt: new Date().toISOString()
+});
       }
 
       setUser(currentUser);
@@ -429,34 +448,27 @@ const contieneParolaVietata =
       )
   );
 
-if (contieneParolaVietata) {
-
-  alert(
-    "Il testo contiene parole non consentite."
-  );
-
-  return;
-}
-
 const nuovoPost = {
   text: spottedText,
   authorId: user ? user.uid : "anonimo",
   createdAt: new Date().toISOString(),
   status: "pending",
   reports: 0,
-  reportedBy: []
+  reportedBy: [],
+  flagReason: contieneParolaVietata
+    ? "Parola vietata"
+    : null
 };
 
-if (approvalEnabled) {
+const vaInModerazione =
+  contieneParolaVietata ||
+  approvalEnabled;
+  if (vaInModerazione) {
 
   await addDoc(
     collection(db, "pendingPosts"),
     nuovoPost
   );
-
-  alert("Spotted inviato per approvazione");
-
-  caricaPendingPosts();
 
 } else {
 
@@ -465,11 +477,12 @@ if (approvalEnabled) {
     nuovoPost
   );
 
-  alert("Spotted pubblicato");
-
   caricaPost();
-
 }
+
+alert(
+  "Il tuo spotted è stato inviato per l'approvazione"
+);
 
 setUltimoInvio(Date.now());
 
@@ -477,28 +490,37 @@ setSpottedText("");
 };
 
 
-  const approvaPost = async (post) => {
-    await addDoc(collection(db, "posts"), {
+const approvaPost = async (post) => {
+
+  await addDoc(collection(db, "posts"), {
   text: post.text,
   likes: 0,
   comments: 0,
   author: "admin",
-  createdAt: new Date().toISOString()
+  createdAt: post.createdAt,
+  reports: post.reports || 0,
+  reportedBy: post.reportedBy || []
 });
 
-    await deleteDoc(
-      doc(db, "pendingPosts", post.id)
-    );
-
-    caricaPost();
-    caricaPendingPosts();
-  };
+  await deleteDoc(
+    doc(db, "pendingPosts", post.id)
+  );
+await salvaLog(
+  "Approva spotted",
+  post.id
+);
+  caricaPost();
+  caricaPendingPosts();
+};
 
   const rifiutaPost = async (id) => {
     await deleteDoc(
       doc(db, "pendingPosts", id)
     );
-
+await salvaLog(
+  "Rifiuta spotted",
+  id
+);
     caricaPendingPosts();
   };
 
@@ -738,7 +760,12 @@ const toggleBan = async (
       banned: !statoAttuale
     }
   );
-
+await salvaLog(
+  statoAttuale
+    ? "Sblocco utente"
+    : "Ban utente",
+  uid
+);
   caricaUtenti();
 };
 
@@ -827,6 +854,86 @@ async (id) => {
   caricaParoleVietate();
 
 };
+const salvaLog = async (
+  azione,
+  target
+) => {
+
+  await addDoc(
+    collection(db, "adminLogs"),
+    {
+      action: azione,
+      target: target,
+      admin: savedNickname,
+      createdAt:
+        new Date().toISOString()
+    }
+  );
+
+};
+const eliminaUtente = async (uid) => {
+
+  const conferma = window.confirm(
+    "Eliminare questo utente?"
+  );
+
+  if (!conferma) return;
+
+  await deleteDoc(
+    doc(db, "users", uid)
+  );
+await salvaLog(
+  "Elimina utente",
+  uid
+);
+  caricaUtenti();
+};
+
+const aggiungiGruppo = async () => {
+
+  if (!nomeGruppo.trim()) return;
+
+  await addDoc(
+    collection(db, "groups"),
+    {
+      name: nomeGruppo,
+      description: descrizioneGruppo,
+      photo: fotoGruppo,
+      links: linkGruppo
+        .split(",")
+        .map((l) => l.trim()),
+      createdAt:
+        new Date().toISOString()
+    }
+  );
+
+  setNomeGruppo("");
+  setDescrizioneGruppo("");
+  setFotoGruppo("");
+  setLinkGruppo("");
+
+  caricaGruppi();
+
+  alert("Gruppo aggiunto");
+};
+
+const caricaGruppi = async () => {
+
+  const snapshot = await getDocs(
+    collection(db, "groups")
+  );
+
+  const lista = [];
+
+  snapshot.forEach((docu) => {
+    lista.push({
+      id: docu.id,
+      ...docu.data()
+    });
+  });
+
+  setGruppi(lista);
+};
 
 return (
   <div className="app-container">
@@ -846,9 +953,15 @@ return (
 )}
 
     {!user && (
-      <button onClick={loginGoogle}>
-        Accedi con Google
-      </button>
+      <div
+  style={{
+    marginBottom: "35px"
+  }}
+>
+  <button onClick={loginGoogle}>
+    Accedi con Google
+  </button>
+</div>
     )}
 
 {user && !savedNickname && (
@@ -932,12 +1045,44 @@ return (
     : "⚡ Pubblicazione automatica"}
 
   </button>
-      <p>
-        📩 Da approvare: {pendingPosts.length}
-      </p>
-      <p>
-        Totale utenti registrati: {utenti.length}
-      </p>
+      <div className="stats-grid">
+
+  <div className="stat-card">
+    <h3>📩 Pending</h3>
+    <div className="stat-number">
+      {pendingPosts.length}
+    </div>
+  </div>
+
+  <div className="stat-card">
+    <h3>👥 Utenti</h3>
+    <div className="stat-number">
+      {utenti.length}
+    </div>
+  </div>
+
+  <div className="stat-card">
+    <h3>📝 Spotted</h3>
+    <div className="stat-number">
+      {posts.length}
+    </div>
+  </div>
+
+  <div className="stat-card">
+    <h3>❤️ Like</h3>
+    <div className="stat-number">
+      {likes.length}
+    </div>
+  </div>
+
+  <div className="stat-card">
+    <h3>💬 Commenti</h3>
+    <div className="stat-number">
+      {comments.length}
+    </div>
+  </div>
+
+</div>
       <hr />
 
 <h3>🚫 Parole vietate</h3>
@@ -1026,6 +1171,11 @@ return (
     {utente.role}
   </p>
 
+<p>
+  <strong>Newsletter:</strong>{" "}
+  {utente.newsletter || "Mai"}
+</p>
+
   <p>
     <strong>Registrato il:</strong>{" "}
     {utente.createdAt
@@ -1043,6 +1193,7 @@ return (
   </p>
 
   {utente.role !== "admin" && (
+  <>
     <button
       onClick={() =>
         toggleBan(
@@ -1055,10 +1206,23 @@ return (
         ? "✅ Sblocca"
         : "🚫 Banna"}
     </button>
-  )}
+
+    <button
+      onClick={() =>
+  eliminaUtente(utente.id)
+      }
+      style={{
+        marginLeft: "10px"
+      }}
+    >
+      🗑 Elimina
+    </button>
+  </>
+)}
 
 </div>
       ))}
+
 {utenti.length > utentiVisibili && (
   <button
     onClick={() =>
@@ -1071,11 +1235,184 @@ return (
   </button>
 )}
     </details>
+
+<details className="admin-dashboard">
+
+  <summary
+    style={{
+      cursor: "pointer",
+      fontSize: "22px",
+      fontWeight: "bold",
+      marginBottom: "15px"
+    }}
+  >
+    📸 Spotted pubblicati ({posts.length})
+  </summary>
+
+  {posts
+  .sort(
+    (a, b) =>
+      new Date(b.createdAt || 0) -
+      new Date(a.createdAt || 0)
+  )
+  .slice(
+    0,
+    postScreenshotVisibili
+  )
+    .map((post) => (
+
+      <div
+  key={post.id}
+  className="screenshot-post"
+>
+
+        <p>{post.text}</p>
+
+        <p
+          style={{
+            color: "#999",
+            fontSize: "12px"
+          }}
+        >
+          {
+            new Date(
+              post.createdAt
+            ).toLocaleDateString("it-IT")
+          }
+        </p>
+
+        <p>
+          {
+            likes.filter(
+              (like) =>
+                like.postId === post.id
+            ).length
+          }
+
+          {" like - "}
+
+          {
+            comments.filter(
+              (c) =>
+                c.postId === post.id
+            ).length
+          }
+
+          {" commenti"}
+        </p>
+
+      </div>
+
+    ))}
+
+  {posts.length > postScreenshotVisibili && (
+    <button
+      onClick={() =>
+        setPostScreenshotVisibili(
+  postScreenshotVisibili + 10
+)
+      }
+    >
+      Mostra altri spotted
+    </button>
+  )}
+
+</details>
+
+<details className="admin-dashboard">
+
+  <summary
+    style={{
+      cursor: "pointer",
+      fontSize: "22px",
+      fontWeight: "bold",
+      marginBottom: "15px"
+    }}
+  >
+    📚 Gruppi
+  </summary>
+
+  <input
+    type="text"
+    placeholder="Nome gruppo"
+    value={nomeGruppo}
+    onChange={(e) =>
+      setNomeGruppo(
+        e.target.value
+      )
+    }
+  />
+
+  <textarea
+    placeholder="Descrizione"
+    value={descrizioneGruppo}
+    onChange={(e) =>
+      setDescrizioneGruppo(
+        e.target.value
+      )
+    }
+  />
+
+  <input
+    type="text"
+    placeholder="URL foto"
+    value={fotoGruppo}
+    onChange={(e) =>
+      setFotoGruppo(
+        e.target.value
+      )
+    }
+  />
+
+  <input
+    type="text"
+    placeholder="Link separati da virgola"
+    value={linkGruppo}
+    onChange={(e) =>
+      setLinkGruppo(
+        e.target.value
+      )
+    }
+  />
+
+  <button onClick={aggiungiGruppo}>
+    ➕ Aggiungi gruppo
+  </button>
+
+
+</details>
+
   </>
 )}
 
-
 <hr />
+
+{user && gruppi?.length > 0 && (
+  <>
+    <h2>📚 Gruppi</h2>
+
+    {gruppi.map((gruppo) => (
+      <div key={gruppo.id} className="group-card">
+        <h3>{gruppo.name}</h3>
+
+        {gruppo.photo && (
+          <img src={gruppo.photo} alt={gruppo.name} />
+        )}
+
+        <p>{gruppo.description}</p>
+
+        {gruppo.links?.map((link, index) => (
+          <div key={index}>
+            <a href={link} target="_blank" rel="noopener noreferrer">
+              🔗 Apri gruppo
+            </a>
+          </div>
+        ))}
+      </div>
+    ))}
+  </>
+)}
+
 
 <h2>Spotted pubblicati</h2>
 {isAdmin && (

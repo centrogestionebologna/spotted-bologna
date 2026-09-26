@@ -131,7 +131,17 @@ function Post({
       Hanno messo like:
     </strong>
 
-    ...
+{likes
+  .filter(
+    (like) =>
+      like.postId === post.id
+  )
+  .map((like) => (
+    <div key={like.id}>
+      {like.nickname}
+    </div>
+))}
+
   </div>
 )}
 
