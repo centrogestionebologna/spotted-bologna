@@ -54,9 +54,9 @@ function App() {
   const [
   postScreenshotVisibili,
   setPostScreenshotVisibili
-  ] = useState(10); 
+  ] = useState(3); 
   const [utentiVisibili, setUtentiVisibili] =
-  useState(10);
+  useState(3);
   const [paroleVietate, setParoleVietate] =
   useState([]);
 
@@ -67,6 +67,25 @@ function App() {
   useState("mai");
   const [ultimoInvio, setUltimoInvio] =
   useState(0);
+
+const [gruppoInModifica, setGruppoInModifica] =
+  useState(null);
+
+const [nomeGruppoEdit, setNomeGruppoEdit] =
+  useState("");
+
+const [
+  descrizioneGruppoEdit,
+  setDescrizioneGruppoEdit
+] = useState("");
+
+const [fotoGruppoEdit, setFotoGruppoEdit] =
+  useState("");
+
+const [linkGruppoEdit, setLinkGruppoEdit] =
+  useState("");
+
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [ricercaUtente, setRicercaUtente] =
     useState("");
@@ -75,8 +94,35 @@ function App() {
   const [spottedText, setSpottedText] = useState("");
   const [commentInputs, setCommentInputs] =
   useState({});
-  const [approvalEnabled, setApprovalEnabled] =
-  useState(true);
+  const [
+  approvalEnabledPosts,
+  setApprovalEnabledPosts
+] = useState(true);
+
+const [
+  approvalEnabledGroups,
+  setApprovalEnabledGroups
+] = useState(true);
+
+const [
+  mostraPropostaGruppo,
+  setMostraPropostaGruppo
+] = useState(false);
+
+const [
+  propostaDescrizione,
+  setPropostaDescrizione
+] = useState("");
+
+const [
+  propostaLink,
+  setPropostaLink
+] = useState("");
+
+const [
+  propostaTargetLike,
+  setPropostaTargetLike
+] = useState(10);
 
 // eslint-disable-next-line react-hooks/exhaustive-deps
 useEffect(() => {
@@ -85,7 +131,6 @@ useEffect(() => {
   caricaCommenti();
   caricaLike();
   caricaImpostazioni();
-  caricaGruppi();
   onAuthStateChanged(
     auth,
     async (currentUser) => {
@@ -93,6 +138,7 @@ useEffect(() => {
       if (!currentUser) return;
 
       setUser(currentUser);
+      caricaGruppi();
       caricaIscritti();
       const userRef = doc(
         db,
@@ -223,11 +269,17 @@ const caricaImpostazioni = async () => {
     doc(db, "settings", "general")
   );
 
-  if (snap.exists()) {
-    setApprovalEnabled(
-      snap.data().approvalEnabled
-    );
-  }
+ if (snap.exists()) {
+
+  setApprovalEnabledPosts(
+    snap.data().approvalEnabledPosts ?? true
+  );
+
+  setApprovalEnabledGroups(
+    snap.data().approvalEnabledGroups ?? true
+  );
+
+}
 
 };
 
@@ -462,7 +514,7 @@ const nuovoPost = {
 
 const vaInModerazione =
   contieneParolaVietata ||
-  approvalEnabled;
+  approvalEnabledPosts;
   if (vaInModerazione) {
 
   await addDoc(
@@ -488,29 +540,120 @@ setUltimoInvio(Date.now());
 
 setSpottedText("");
 };
+const inviaPropostaGruppo = async () => {
 
+  if (!user) {
+    alert("Devi essere registrato");
+    return;
+  }
+
+  if (!propostaDescrizione.trim()) {
+    alert("Inserisci una descrizione");
+    return;
+  }
+
+  if (!propostaLink.trim()) {
+    alert("Inserisci un link");
+    return;
+  }
+
+  const contieneParolaVietata =
+    paroleVietate.some(
+      (parola) =>
+        propostaDescrizione
+          .toLowerCase()
+          .includes(
+            parola.word.toLowerCase()
+          )
+    );
+
+  const nuovaProposta = {
+
+    type: "groupProposal",
+
+    text: propostaDescrizione,
+
+    groupLink: propostaLink,
+
+    requiredLikes:
+      propostaTargetLike,
+
+    authorId: user.uid,
+
+    createdAt:
+      new Date().toISOString(),
+
+    reports: 0,
+
+    reportedBy: [],
+
+    unlockedAt: null,
+
+    flagReason:
+      contieneParolaVietata
+        ? "Parola vietata"
+        : null
+
+  };
+
+  const vaInModerazione =
+    contieneParolaVietata ||
+    approvalEnabledGroups;
+
+  if (vaInModerazione) {
+
+    await addDoc(
+      collection(
+        db,
+        "pendingPosts"
+      ),
+      nuovaProposta
+    );
+
+  } else {
+
+    await addDoc(
+      collection(db, "posts"),
+      nuovaProposta
+    );
+
+  }
+
+  setPropostaDescrizione("");
+  setPropostaLink("");
+  setPropostaTargetLike(10);
+
+  setMostraPropostaGruppo(false);
+
+  caricaPost();
+
+  alert("Proposta inviata");
+
+};
 
 const approvaPost = async (post) => {
 
-  await addDoc(collection(db, "posts"), {
-  text: post.text,
-  likes: 0,
-  comments: 0,
-  author: "admin",
-  createdAt: post.createdAt,
-  reports: post.reports || 0,
-  reportedBy: post.reportedBy || []
-});
+  const { id, ...postData } = post;
+
+  await addDoc(
+    collection(db, "posts"),
+    {
+      ...postData
+    }
+  );
 
   await deleteDoc(
     doc(db, "pendingPosts", post.id)
   );
-await salvaLog(
-  "Approva spotted",
-  post.id
-);
+
+  await salvaLog(
+    "Approva spotted",
+    post.id
+  );
+
   caricaPost();
   caricaPendingPosts();
+
 };
 
   const rifiutaPost = async (id) => {
@@ -589,7 +732,49 @@ const toggleLike = async (postId) => {
 
   }
 
-  caricaLike();
+ caricaLike();
+
+const postDaControllare =
+  posts.find(
+    (p) => p.id === postId
+  );
+
+if (
+  postDaControllare &&
+  postDaControllare.type ===
+    "groupProposal"
+) {
+
+  const nuoviLike = await getDocs(
+    collection(db, "likes")
+  );
+
+  const totaleLike =
+    nuoviLike.docs.filter(
+      (docu) =>
+        docu.data().postId === postId
+    ).length;
+
+  if (
+    totaleLike >=
+      postDaControllare.requiredLikes &&
+    !postDaControllare.unlockedAt
+  ) {
+
+    await updateDoc(
+      doc(db, "posts", postId),
+      {
+        unlockedAt:
+          new Date().toISOString()
+      }
+    );
+
+    caricaPost();
+
+  }
+
+}
+
 };
 
 const segnalaPost = async (postId) => {
@@ -769,18 +954,36 @@ await salvaLog(
   caricaUtenti();
 };
 
-const toggleApproval = async () => {
+const toggleApprovalPosts =
+async () => {
 
   await updateDoc(
     doc(db, "settings", "general"),
     {
-      approvalEnabled:
-        !approvalEnabled
+      approvalEnabledPosts:
+        !approvalEnabledPosts
     }
   );
 
-  setApprovalEnabled(
-    !approvalEnabled
+  setApprovalEnabledPosts(
+    !approvalEnabledPosts
+  );
+
+};
+
+const toggleApprovalGroups =
+async () => {
+
+  await updateDoc(
+    doc(db, "settings", "general"),
+    {
+      approvalEnabledGroups:
+        !approvalEnabledGroups
+    }
+  );
+
+  setApprovalEnabledGroups(
+    !approvalEnabledGroups
   );
 
 };
@@ -917,6 +1120,46 @@ const aggiungiGruppo = async () => {
   alert("Gruppo aggiunto");
 };
 
+const eliminaGruppo = async (id) => {
+
+  const conferma = window.confirm(
+    "Vuoi eliminare questo gruppo?"
+  );
+
+  if (!conferma) return;
+
+  await deleteDoc(
+    doc(db, "groups", id)
+  );
+
+  caricaGruppi();
+
+};
+
+const salvaModificaGruppo = async () => {
+
+  if (!gruppoInModifica) return;
+
+  await updateDoc(
+    doc(db, "groups", gruppoInModifica),
+    {
+      name: nomeGruppoEdit,
+      description: descrizioneGruppoEdit,
+      photo: fotoGruppoEdit,
+      links: linkGruppoEdit
+        .split(",")
+        .map((l) => l.trim())
+    }
+  );
+
+  setGruppoInModifica(null);
+
+  caricaGruppi();
+
+  alert("Gruppo aggiornato");
+
+};
+
 const caricaGruppi = async () => {
 
   const snapshot = await getDocs(
@@ -1010,21 +1253,139 @@ return (
   {spottedText.length}/1000
 </p>
 
+<div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: "15px"
+  }}
+>
+
   <button onClick={inviaSpotted}>
     Invia Spotted
   </button>
+
+<span
+  onClick={() =>
+    setMostraPropostaGruppo(
+      !mostraPropostaGruppo
+    )
+  }
+  style={{
+    cursor: "pointer",
+    color: "#ffffff",
+    fontSize: "14px",
+    fontWeight: "500",
+    textDecoration: "underline"
+  }}
+>
+  + Proponi gruppo
+</span>
+
+</div>
+
+{mostraPropostaGruppo && (
+
+<div className="section-card">
+
+  <h2>📚 Proponi un gruppo</h2>
+
+  <p>
+    Descrivi bene il gruppo.
+    Non saranno disponibili commenti.
+  </p>
+
+  <textarea
+    rows="5"
+    value={propostaDescrizione}
+    onChange={(e) =>
+      setPropostaDescrizione(
+        e.target.value
+      )
+    }
+    placeholder="Descrivi il gruppo..."
+  />
+
+  <input
+    type="text"
+    value={propostaLink}
+    onChange={(e) =>
+      setPropostaLink(
+        e.target.value
+      )
+    }
+    placeholder="Link WhatsApp, Telegram o Instagram"
+  />
+
+<label
+  style={{
+    display: "block",
+    marginTop: "15px",
+    marginBottom: "8px",
+    color: "#fff",
+    fontWeight: "bold"
+  }}
+>
+  ❤️ Numero di like necessari per rendere disponibile il link
+</label>
+
+<p
+  style={{
+    color: "#999",
+    fontSize: "14px"
+  }}
+>
+  Il link resterà nascosto fino al raggiungimento di questo numero di like.
+</p>
+
+<input
+  type="number"
+  min="1"
+  value={propostaTargetLike}
+  onChange={(e) =>
+    setPropostaTargetLike(
+      Number(e.target.value)
+    )
+  }
+/>
+
+<button
+  onClick={inviaPropostaGruppo}
+>
+  📩 Invia proposta
+</button>
+
+</div>
+
+)}
 
 </div>
 
 {user && savedNickname && isAdmin && (
   <>
-    <AdminPanel
-      pendingPosts={pendingPosts}
-      approvaPost={approvaPost}
-      rifiutaPost={rifiutaPost}
-    />
 
-    <details className="admin-dashboard">
+<details className="admin-dashboard">
+<summary
+  style={{
+    cursor: "pointer",
+    fontSize: "22px",
+    fontWeight: "bold",
+    marginBottom: "15px"
+  }}
+>
+  📩 Pending ({pendingPosts.length})
+</summary>
+
+  <AdminPanel
+    pendingPosts={pendingPosts}
+    approvaPost={approvaPost}
+    rifiutaPost={rifiutaPost}
+  />
+
+</details>
+
+<details className="admin-dashboard">
 
   <summary
     style={{
@@ -1037,22 +1398,30 @@ return (
     👥 Dashboard Community
   </summary>
 
-      <h2>👥 Dashboard Community</h2>
-      <button onClick={toggleApproval}>
+<div>
 
-  {approvalEnabled
-    ? "✅ Approvazione attiva"
-    : "⚡ Pubblicazione automatica"}
-
+  <button
+    onClick={toggleApprovalPosts}
+  >
+    {approvalEnabledPosts
+      ? "📝 Spotted: approvazione attiva"
+      : "📝 Spotted: pubblicazione automatica"}
   </button>
-      <div className="stats-grid">
 
-  <div className="stat-card">
-    <h3>📩 Pending</h3>
-    <div className="stat-number">
-      {pendingPosts.length}
-    </div>
-  </div>
+  <button
+    onClick={toggleApprovalGroups}
+    style={{
+      marginLeft: "10px"
+    }}
+  >
+    {approvalEnabledGroups
+      ? "📚 Gruppi: approvazione attiva"
+      : "📚 Gruppi: pubblicazione automatica"}
+  </button>
+
+</div>
+
+      <div className="stats-grid">
 
   <div className="stat-card">
     <h3>👥 Utenti</h3>
@@ -1083,48 +1452,47 @@ return (
   </div>
 
 </div>
-      <hr />
 
-<h3>🚫 Parole vietate</h3>
+<details>
+  <summary>🚫 Parole vietate</summary>
 
-<input
-  type="text"
-  placeholder="Nuova parola vietata"
-  value={nuovaParola}
-  onChange={(e) =>
-    setNuovaParola(e.target.value)
-  }
-/>
+  <input
+    type="text"
+    placeholder="Nuova parola vietata"
+    value={nuovaParola}
+    onChange={(e) =>
+      setNuovaParola(e.target.value)
+    }
+  />
 
-<button
-  onClick={aggiungiParolaVietata}
->
-  Aggiungi
-</button>
-
-{paroleVietate.map((parola) => (
-  <div
-    key={parola.id}
-    style={{
-      marginTop: "10px"
-    }}
+  <button
+    onClick={aggiungiParolaVietata}
   >
-    {parola.word}
+    Aggiungi
+  </button>
 
-    <button
-      style={{
-        marginLeft: "10px"
-      }}
-      onClick={() =>
-        eliminaParolaVietata(
-          parola.id
-        )
-      }
-    >
-      Elimina
-    </button>
-  </div>
-))}
+  {paroleVietate.map((parola) => (
+    <div key={parola.id}>
+      {parola.word}
+
+      <button
+        onClick={() =>
+          eliminaParolaVietata(
+            parola.id
+          )
+        }
+      >
+        Elimina
+      </button>
+    </div>
+  ))}
+
+</details>
+
+<details>
+<summary>
+👥 Utenti ({utenti.length})
+</summary>
 
 <input
   type="text"
@@ -1227,14 +1595,16 @@ return (
   <button
     onClick={() =>
       setUtentiVisibili(
-        utentiVisibili + 10
+        utentiVisibili + 3
       )
     }
   >
-    Mostra altri utenti
+    Mostra altri
   </button>
 )}
     </details>
+
+</details>
 
 <details className="admin-dashboard">
 
@@ -1309,89 +1679,92 @@ return (
     <button
       onClick={() =>
         setPostScreenshotVisibili(
-  postScreenshotVisibili + 10
+  postScreenshotVisibili + 3
 )
       }
     >
-      Mostra altri spotted
+      Mostra altri
     </button>
   )}
 
 </details>
 
-<details className="admin-dashboard">
 
-  <summary
-    style={{
-      cursor: "pointer",
-      fontSize: "22px",
-      fontWeight: "bold",
-      marginBottom: "15px"
-    }}
-  >
-    📚 Gruppi
-  </summary>
-
-  <input
-    type="text"
-    placeholder="Nome gruppo"
-    value={nomeGruppo}
-    onChange={(e) =>
-      setNomeGruppo(
-        e.target.value
-      )
-    }
-  />
-
-  <textarea
-    placeholder="Descrizione"
-    value={descrizioneGruppo}
-    onChange={(e) =>
-      setDescrizioneGruppo(
-        e.target.value
-      )
-    }
-  />
-
-  <input
-    type="text"
-    placeholder="URL foto"
-    value={fotoGruppo}
-    onChange={(e) =>
-      setFotoGruppo(
-        e.target.value
-      )
-    }
-  />
-
-  <input
-    type="text"
-    placeholder="Link separati da virgola"
-    value={linkGruppo}
-    onChange={(e) =>
-      setLinkGruppo(
-        e.target.value
-      )
-    }
-  />
-
-  <button onClick={aggiungiGruppo}>
-    ➕ Aggiungi gruppo
-  </button>
-
-
-</details>
 
   </>
 )}
 
-<hr />
+{user && (
+  <details className="admin-dashboard">
 
-{user && gruppi?.length > 0 && (
-  <>
-    <h2>📚 Gruppi</h2>
+<summary
+  style={{
+    cursor: "pointer",
+    fontSize: "22px",
+    fontWeight: "bold",
+    marginBottom: "15px"
+  }}
+>
+  📚 Gruppi ({gruppi.length})
+</summary>
 
-    {gruppi.map((gruppo) => (
+{isAdmin && (
+
+  <div className="section-card">
+
+<h2>➕ Nuovo gruppo</h2>
+    <input
+      type="text"
+      placeholder="Nome gruppo"
+      value={nomeGruppo}
+      onChange={(e) =>
+        setNomeGruppo(e.target.value)
+      }
+    />
+
+    <textarea
+      placeholder="Descrizione"
+      value={descrizioneGruppo}
+      onChange={(e) =>
+        setDescrizioneGruppo(
+          e.target.value
+        )
+      }
+    />
+
+    <input
+      type="text"
+      placeholder="URL foto"
+      value={fotoGruppo}
+      onChange={(e) =>
+        setFotoGruppo(
+          e.target.value
+        )
+      }
+    />
+
+    <input
+      type="text"
+      placeholder="Link separati da virgola"
+      value={linkGruppo}
+      onChange={(e) =>
+        setLinkGruppo(
+          e.target.value
+        )
+      }
+    />
+
+    <button
+      onClick={aggiungiGruppo}
+    >
+      ➕ Aggiungi gruppo
+    </button>
+
+  </div>
+
+)}
+
+{gruppi.map((gruppo) => (
       <div key={gruppo.id} className="group-card">
         <h3>{gruppo.name}</h3>
 
@@ -1408,11 +1781,129 @@ return (
             </a>
           </div>
         ))}
+      {isAdmin && (
+
+  <div
+    style={{
+      marginTop: "10px"
+    }}
+  >
+
+    <button
+      onClick={() => {
+
+        setGruppoInModifica(
+          gruppo.id
+        );
+
+        setNomeGruppoEdit(
+          gruppo.name || ""
+        );
+
+        setDescrizioneGruppoEdit(
+          gruppo.description || ""
+        );
+
+        setFotoGruppoEdit(
+          gruppo.photo || ""
+        );
+
+        setLinkGruppoEdit(
+          gruppo.links?.join(", ") || ""
+        );
+
+      }}
+    >
+      ✏️ Modifica
+    </button>
+
+    <button
+      onClick={() =>
+        eliminaGruppo(gruppo.id)
+      }
+      style={{
+        marginLeft: "10px"
+      }}
+    >
+      🗑 Elimina
+    </button>
+
+  </div>
+
+)}
       </div>
     ))}
-  </>
-)}
+{isAdmin && gruppoInModifica && (
 
+  <div className="section-card">
+
+    <h3>✏️ Modifica gruppo</h3>
+
+    <input
+      type="text"
+      value={nomeGruppoEdit}
+      onChange={(e) =>
+        setNomeGruppoEdit(
+          e.target.value
+        )
+      }
+      placeholder="Nome gruppo"
+    />
+
+    <textarea
+      value={descrizioneGruppoEdit}
+      onChange={(e) =>
+        setDescrizioneGruppoEdit(
+          e.target.value
+        )
+      }
+      placeholder="Descrizione"
+    />
+
+    <input
+      type="text"
+      value={fotoGruppoEdit}
+      onChange={(e) =>
+        setFotoGruppoEdit(
+          e.target.value
+        )
+      }
+      placeholder="URL foto"
+    />
+
+    <input
+      type="text"
+      value={linkGruppoEdit}
+      onChange={(e) =>
+        setLinkGruppoEdit(
+          e.target.value
+        )
+      }
+      placeholder="Link separati da virgola"
+    />
+
+    <button
+      onClick={salvaModificaGruppo}
+    >
+      💾 Salva modifiche
+    </button>
+
+    <button
+      onClick={() =>
+        setGruppoInModifica(null)
+      }
+      style={{
+        marginLeft: "10px"
+      }}
+    >
+      ❌ Annulla
+    </button>
+
+  </div>
+
+)}
+  </details>
+)}  
 
 <h2>Spotted pubblicati</h2>
 {isAdmin && (
