@@ -170,9 +170,22 @@ const giaSegnalato =
     <button
       onClick={() => {
 
-        navigator.clipboard.writeText(
-          window.location.href
-        );
+       if (navigator.share) {
+
+  navigator.share({
+    text: post.text,
+    url: window.location.origin
+  });
+
+} else {
+
+  navigator.clipboard.writeText(
+`${post.text}
+
+${window.location.origin}`
+  );
+
+}
 
         alert("Link copiato!");
 

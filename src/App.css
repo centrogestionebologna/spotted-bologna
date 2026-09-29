@@ -405,3 +405,33 @@ body {
 .group-card h3{
   margin-top:0;
 }
+
+.login-banner{
+  margin-top:15px;
+
+  color:#f4c542;
+
+  font-size:18px;
+
+  font-weight:800;
+
+  text-shadow:0 0 10px rgba(244,197,66,.4);
+
+  animation:bounceArrow 1.5s infinite;
+}
+
+@keyframes bounceArrow{
+
+  0%{
+    transform:translateY(0);
+  }
+
+  50%{
+    transform:translateY(-6px);
+  }
+
+  100%{
+    transform:translateY(0);
+  }
+
+}

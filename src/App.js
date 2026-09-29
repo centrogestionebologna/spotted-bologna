@@ -1204,6 +1204,15 @@ return (
   <button onClick={loginGoogle}>
     Accedi con Google
   </button>
+
+<div className="login-banner">
+  ⬆️ ACCEDI CON GOOGLE
+  <br />
+  <span>
+  Accedi e sblocca le nostre funzioni aggiuntive social e di gruppo 🚀
+  </span>
+</div>
+
 </div>
     )}
 
@@ -1266,27 +1275,28 @@ return (
     Invia Spotted
   </button>
 
-<span
-  onClick={() =>
-    setMostraPropostaGruppo(
-      !mostraPropostaGruppo
-    )
-  }
-  style={{
-    cursor: "pointer",
-    color: "#ffffff",
-    fontSize: "14px",
-    fontWeight: "500",
-    textDecoration: "underline"
-  }}
->
-  + Proponi gruppo
-</span>
+{user && (
+  <span
+    onClick={() =>
+      setMostraPropostaGruppo(
+        !mostraPropostaGruppo
+      )
+    }
+    style={{
+      cursor: "pointer",
+      color: "#ffffff",
+      fontSize: "14px",
+      fontWeight: "500",
+      textDecoration: "underline"
+    }}
+  >
+    + Proponi gruppo
+  </span>
+)}
 
 </div>
 
-{mostraPropostaGruppo && (
-
+{user && mostraPropostaGruppo && (
 <div className="section-card">
 
   <h2>📚 Proponi un gruppo</h2>
