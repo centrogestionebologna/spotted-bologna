@@ -1,6 +1,8 @@
 import { useState } from "react";
 import CommentSection from "./CommentSection";
 
+const linkValido = (link) => /^https?:\/\//i.test(link || "");
+
 function Post({
   post,
   comments,
@@ -47,23 +49,27 @@ function Post({
   const haMessoLike =
     !!user && postLikes.some((like) => like.userId === user.uid);
 
-  const condividi = () => {
-    if (navigator.share) {
-      navigator.share({
-        text: post.text,
-        url: window.location.origin
-      });
-    } else {
-      navigator.clipboard.writeText(`${post.text}\n\n${window.location.origin}`);
-      alert("Link copiato");
+  const condividi = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          text: post.text,
+          url: window.location.origin
+        });
+      } else {
+        await navigator.clipboard.writeText(
+          `${post.text}\n\n${window.location.origin}`
+        );
+        alert("Link copiato!");
+      }
+    } catch (error) {
+      // L'utente ha chiuso la finestra di condivisione: nessun problema
+      console.error(error);
     }
   };
 
-  const confermaElimina = () => {
-    if (window.confirm("Vuoi davvero eliminare questo spotted?")) {
-      eliminaPost(post.id);
-    }
-  };
+  // La conferma è già in App.js (eliminaPost): qui non la ripeto
+  const confermaElimina = () => eliminaPost(post.id);
 
   return (
     <div className="post-card">
@@ -84,15 +90,17 @@ function Post({
       {/* Sezione proposta gruppo */}
       {isGroupProposal && (
         <div style={{ marginTop: "15px" }}>
-          <p style={{ fontWeight: "bold" }}>
-            ❤️ {likesCount} / {requiredLikes} like
+          <p style={{ fontWeight: user ? "bold" : "normal" }}>
+            {user ? `❤️ ${likesCount} / ${requiredLikes}` : likesCount} like
           </p>
 
-          {!user ? (
+          {!user && (
             <p style={{ color: "#ffcc00", fontWeight: "bold" }}>
               🔒 Accedi per visualizzare il link
             </p>
-          ) : (
+          )}
+
+          {user && (
             <>
               {scadutoSenzaTarget && (
                 <>
@@ -119,13 +127,15 @@ function Post({
                   <p style={{ color: "#4caf50", fontWeight: "bold" }}>
                     ✅ Gruppo sbloccato
                   </p>
-                  <a
-                    href={post.groupLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    🔗 Apri gruppo
-                  </a>
+                  {linkValido(post.groupLink) && (
+                    <a
+                      href={post.groupLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      🔗 Apri gruppo
+                    </a>
+                  )}
                 </>
               )}
 
@@ -144,8 +154,9 @@ function Post({
         </div>
       )}
 
-      {/* Azioni utente */}
-      {user && (
+      {/* Azioni utente: solo per le proposte gruppo.
+          Negli spotted normali i tasti stanno in fondo, in CommentSection. */}
+      {user && isGroupProposal && (
         <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
           <button onClick={() => toggleLike(post.id)}>
             {haMessoLike ? "❤️" : "🤍"}

@@ -2,6 +2,7 @@ import LikeButton from "./LikeButton";
 import { useState } from "react";
 import { doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
+
 function CommentSection({
   post,
   comments,
@@ -15,199 +16,143 @@ function CommentSection({
   toggleLike,
   segnalaPost
 }) {
+  const [commentiVisibili, setCommentiVisibili] = useState(3);
 
-const eliminaCommento = async (id) => {
+  const eliminaCommento = async (id) => {
+    try {
+      await deleteDoc(doc(db, "comments", id));
+      caricaCommenti();
+    } catch (error) {
+      console.error(error);
+      alert("Errore durante l'eliminazione del commento");
+    }
+  };
 
-  await deleteDoc(
-    doc(db, "comments", id)
+  const giaSegnalato = !!post.reportedBy?.includes(user?.uid);
+
+  const commentiPost = comments.filter(
+    (commento) => commento.postId === post.id
   );
 
-  caricaCommenti();
-};
-
-const [commentiVisibili, setCommentiVisibili] =
-  useState(3);
-
-const giaSegnalato =
-  post.reportedBy?.includes(user?.uid);
+  const condividi = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          text: post.text,
+          url: window.location.origin
+        });
+      } else {
+        await navigator.clipboard.writeText(
+          `${post.text}\n\n${window.location.origin}`
+        );
+        alert("Link copiato!");
+      }
+    } catch (error) {
+      // L'utente ha chiuso la finestra di condivisione: nessun problema
+      console.error(error);
+    }
+  };
 
   return (
     <>
       <h4>Commenti</h4>
 
-      {comments
-        .filter(
-          (commento) =>
-            commento.postId === post.id
-        )
-        .slice(0, commentiVisibili)
-        .map((commento) => (
-          <div className="comment-card">
-            
-           <div
-  style={{
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center"
-  }}
->
+      {commentiPost.slice(0, commentiVisibili).map((commento) => (
+        <div className="comment-card" key={commento.id}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}
+          >
+            <div>
+              <strong>{commento.nickname}:</strong> {commento.text}
+            </div>
 
-  <div>
-    <strong>
-      {commento.nickname}:
-    </strong>{" "}
-    {commento.text}
-  </div>
-
-  {user &&
-  (
-    commento.userId === user.uid ||
-    isAdmin
-  ) && (
-<button
-  onClick={() => {
-
-    const conferma =
-      window.confirm(
-        "Vuoi davvero eliminare questo commento?"
-      );
-
-    if (conferma) {
-      eliminaCommento(commento.id);
-    }
-
-  }}
-  style={{
-    marginLeft: "auto"
-  }}
->
-  🗑
-</button>
-  )}
-
-</div>
+            {user && (commento.userId === user.uid || isAdmin) && (
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Vuoi davvero eliminare questo commento?"
+                    )
+                  ) {
+                    eliminaCommento(commento.id);
+                  }
+                }}
+                style={{ marginLeft: "auto" }}
+              >
+                🗑
+              </button>
+            )}
           </div>
-        ))}
-{comments.filter(
-  (commento) =>
-    commento.postId === post.id
-).length > 3 && (
+        </div>
+      ))}
 
-  <button
-    onClick={() =>
-      setCommentiVisibili(
-        commentiVisibili === 3
-          ? 999
-          : 3
-      )
-    }
-  >
-    {commentiVisibili === 3
-      ? "Mostra altri commenti"
-      : "Mostra meno"}
-  </button>
+      {commentiPost.length > 3 && (
+        <button
+          onClick={() =>
+            setCommentiVisibili(commentiVisibili === 3 ? 999 : 3)
+          }
+        >
+          {commentiVisibili === 3
+            ? "Mostra altri commenti"
+            : "Mostra meno"}
+        </button>
+      )}
 
-)}
       {user && (
+        <div>
+          <input
+            type="text"
+            placeholder="Scrivi un commento"
+            value={commentInputs[post.id] || ""}
+            maxLength={500}
+            onChange={(e) =>
+              setCommentInputs({
+                ...commentInputs,
+                [post.id]: e.target.value
+              })
+            }
+          />
 
-<div>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              marginTop: "8px",
+              alignItems: "center"
+            }}
+          >
+            <LikeButton
+              liked={likes.some(
+                (like) =>
+                  like.postId === post.id && like.userId === user.uid
+              )}
+              onToggleLike={() => toggleLike(post.id)}
+            />
 
-  <input
-    type="text"
-    placeholder="Scrivi un commento"
-    value={
-      commentInputs[post.id] || ""
-    }
-    onChange={(e) =>
-      setCommentInputs({
-        ...commentInputs,
-        [post.id]: e.target.value
-      })
-    }
-  />
+            <button
+              onClick={() => segnalaPost(post.id)}
+              style={{
+                backgroundColor: giaSegnalato ? "#d32f2f" : "white",
+                color: giaSegnalato ? "white" : "black"
+              }}
+            >
+              🚩
+            </button>
 
-  <div
-  style={{
-    display: "flex",
-    gap: "10px",
-    marginTop: "8px",
-    alignItems: "center"
-  }}
->
+            <button onClick={condividi}>🔗</button>
 
-    <LikeButton
-      liked={
-        likes.some(
-          (like) =>
-            like.postId === post.id &&
-            like.userId === user.uid
-        )
-      }
-      onToggleLike={() =>
-        toggleLike(post.id)
-      }
-    />
-
-<button
-  onClick={() =>
-    segnalaPost(post.id)
-  }
-  style={{
-    backgroundColor:
-      giaSegnalato
-        ? "#d32f2f"
-        : "white",
-
-    color:
-      giaSegnalato
-        ? "white"
-        : "black"
-  }}
->
-  🚩
-</button>
-
-    <button
-      onClick={() => {
-
-       if (navigator.share) {
-
-  navigator.share({
-    text: post.text,
-    url: window.location.origin
-  });
-
-} else {
-
-  navigator.clipboard.writeText(
-`${post.text}
-
-${window.location.origin}`
-  );
-
-}
-
-        alert("Link copiato!");
-
-      }}
-    >
-      🔗
-    </button>
-
-    <button
-  style={{
-    marginLeft: "auto"
-  }}
-  onClick={() =>
-    inviaCommento(post.id)
-  }
->
-  Invia
-</button>
-
-  </div>
-
-</div>
+            <button
+              style={{ marginLeft: "auto" }}
+              onClick={() => inviaCommento(post.id)}
+            >
+              Invia
+            </button>
+          </div>
+        </div>
       )}
     </>
   );
