@@ -23,6 +23,66 @@ import {
 
 import { auth, provider, db } from "./firebase";
 
+// Ridimensiona e comprime l'immagine, restituisce una stringa base64
+const comprimiImmagine = (
+  file,
+  larghezzaMax = 800,
+  qualita = 0.75
+) =>
+  new Promise((resolve, reject) => {
+
+    const reader = new FileReader();
+
+    reader.onerror = () =>
+      reject(new Error("Lettura file fallita"));
+
+    reader.onload = () => {
+
+      const img = new Image();
+
+      img.onerror = () =>
+        reject(new Error("Immagine non valida"));
+
+      img.onload = () => {
+
+        const scala = Math.min(
+          1,
+          larghezzaMax / img.width
+        );
+
+        const canvas =
+          document.createElement("canvas");
+
+        canvas.width =
+          Math.round(img.width * scala);
+        canvas.height =
+          Math.round(img.height * scala);
+
+        const ctx = canvas.getContext("2d");
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(
+          0, 0,
+          canvas.width,
+          canvas.height
+        );
+        ctx.drawImage(
+          img, 0, 0,
+          canvas.width,
+          canvas.height
+        );
+
+        resolve(
+          canvas.toDataURL("image/jpeg", qualita)
+        );
+      };
+
+      img.src = reader.result;
+    };
+
+    reader.readAsDataURL(file);
+  });
+
 function App() {
   const [nickname, setNickname] = useState("");
   const [savedNickname, setSavedNickname] = useState("");
@@ -633,14 +693,32 @@ const inviaPropostaGruppo = async () => {
 
 const approvaPost = async (post) => {
 
-  const { id, ...postData } = post;
+  // tolgo i campi tecnici che non devono finire in "posts"
+  const { id, originalId, ...postData } = post;
 
-  await addDoc(
-    collection(db, "posts"),
-    {
-      ...postData
-    }
-  );
+  const datiDaPubblicare = {
+    ...postData,
+    reports: 0,
+    reportedBy: []
+  };
+
+  if (originalId) {
+
+    // spotted rimosso dalla community: riuso il suo id originale,
+    // così commenti e like collegati tornano visibili
+    await setDoc(
+      doc(db, "posts", originalId),
+      datiDaPubblicare
+    );
+
+  } else {
+
+    await addDoc(
+      collection(db, "posts"),
+      datiDaPubblicare
+    );
+
+  }
 
   await deleteDoc(
     doc(db, "pendingPosts", post.id)
@@ -656,16 +734,66 @@ const approvaPost = async (post) => {
 
 };
 
-  const rifiutaPost = async (id) => {
-    await deleteDoc(
-      doc(db, "pendingPosts", id)
+const rifiutaPost = async (id) => {
+
+  const postDaRifiutare = pendingPosts.find(
+    (p) => p.id === id
+  );
+
+  // Se è uno spotted rimosso dalla community, cancello anche
+  // commenti e like collegati al post originale
+  if (postDaRifiutare?.originalId) {
+
+    const idOriginale = postDaRifiutare.originalId;
+
+    const commentiSnapshot = await getDocs(
+      collection(db, "comments")
     );
-await salvaLog(
-  "Rifiuta spotted",
-  id
-);
-    caricaPendingPosts();
-  };
+
+    for (const commento of commentiSnapshot.docs) {
+
+      if (commento.data().postId === idOriginale) {
+
+        await deleteDoc(
+          doc(db, "comments", commento.id)
+        );
+
+      }
+
+    }
+
+    const likeSnapshot = await getDocs(
+      collection(db, "likes")
+    );
+
+    for (const like of likeSnapshot.docs) {
+
+      if (like.data().postId === idOriginale) {
+
+        await deleteDoc(
+          doc(db, "likes", like.id)
+        );
+
+      }
+
+    }
+
+  }
+
+  await deleteDoc(
+    doc(db, "pendingPosts", id)
+  );
+
+  await salvaLog(
+    "Rifiuta spotted",
+    id
+  );
+
+  caricaPendingPosts();
+  caricaCommenti();
+  caricaLike();
+
+};
 
 const inviaCommento = async (postId) => {
 
@@ -840,25 +968,44 @@ const segnalaPost = async (postId) => {
 
   if (nuoviReport >= 3) {
 
-    await addDoc(
-      collection(db, "pendingPosts"),
-      {
-        ...dati,
-        reports: nuoviReport,
-        reportedBy: nuoviSegnalatori,
-        flagReason:
-          "Segnalato dalla community"
-      }
-    );
+    try {
 
-    await deleteDoc(postRef);
+            await addDoc(
+        collection(db, "pendingPosts"),
+        {
+          ...dati,
+          reports: nuoviReport,
+          reportedBy: nuoviSegnalatori,
+          flagReason:
+            "Segnalato dalla community",
+          originalId: postId   // <-- NUOVA RIGA
+        }
+      );
 
-    alert(
-      "Lo spotted è stato rimosso e inviato alla moderazione."
-    );
+      await deleteDoc(postRef);
+
+      alert(
+        "Lo spotted è stato rimosso e inviato alla moderazione."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Errore rimozione spotted segnalato:",
+        error
+      );
+
+      alert(
+        "Errore nella rimozione dello spotted."
+      );
+
+    }
 
     caricaPost();
-    caricaPendingPosts();
+
+    if (isAdmin) {
+      caricaPendingPosts();
+    }
   }
 };
 
@@ -1090,6 +1237,34 @@ await salvaLog(
   uid
 );
   caricaUtenti();
+};
+
+const selezionaFoto = async (e, setFoto) => {
+
+  const file = e.target.files[0];
+
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    alert("Seleziona un file immagine");
+    return;
+  }
+
+  try {
+
+    const base64 = await comprimiImmagine(file);
+
+    if (base64.length > 900000) {
+      alert("Immagine troppo pesante, scegline un'altra");
+      return;
+    }
+
+    setFoto(base64);
+
+  } catch (error) {
+    console.error(error);
+    alert("Impossibile caricare l'immagine");
+  }
 };
 
 const aggiungiGruppo = async () => {
@@ -1630,59 +1805,16 @@ return (
   </summary>
 
   {posts
-  .sort(
-    (a, b) =>
-      new Date(b.createdAt || 0) -
-      new Date(a.createdAt || 0)
-  )
-  .slice(
-    0,
-    postScreenshotVisibili
-  )
+    .slice(0, postScreenshotVisibili)
     .map((post) => (
-
-      <div
-  key={post.id}
-  className="screenshot-post"
->
-
-        <p>{post.text}</p>
-
-        <p
-          style={{
-            color: "#999",
-            fontSize: "12px"
-          }}
-        >
-          {
-            new Date(
-              post.createdAt
-            ).toLocaleDateString("it-IT")
-          }
-        </p>
-
-        <p>
-          {
-            likes.filter(
-              (like) =>
-                like.postId === post.id
-            ).length
-          }
-
-          {" like - "}
-
-          {
-            comments.filter(
-              (c) =>
-                c.postId === post.id
-            ).length
-          }
-
-          {" commenti"}
-        </p>
-
-      </div>
-
+      <Post
+        key={post.id}
+        post={post}
+        comments={comments}
+        likes={likes}
+        user={null}
+        isAdmin={false}
+      />
     ))}
 
   {posts.length > postScreenshotVisibili && (
@@ -1742,16 +1874,40 @@ return (
       }
     />
 
+      <label
+      style={{
+        display: "block",
+        marginTop: "10px",
+        color: "#ccc",
+        fontSize: "14px"
+      }}
+    >
+      📷 Foto del gruppo
+    </label>
+
     <input
-      type="text"
-      placeholder="URL foto"
-      value={fotoGruppo}
+      key={fotoGruppo ? "con-foto" : "senza-foto"}
+      type="file"
+      accept="image/*"
       onChange={(e) =>
-        setFotoGruppo(
-          e.target.value
-        )
+        selezionaFoto(e, setFotoGruppo)
       }
     />
+
+    {fotoGruppo && (
+      <div>
+        <img
+          src={fotoGruppo}
+          alt="Anteprima"
+          className="group-photo-preview"
+        />
+        <button
+          onClick={() => setFotoGruppo("")}
+        >
+          Rimuovi foto
+        </button>
+      </div>
+    )}
 
     <input
       type="text"
@@ -1775,74 +1931,78 @@ return (
 )}
 
 {gruppi.map((gruppo) => (
-      <div key={gruppo.id} className="group-card">
-        <h3>{gruppo.name}</h3>
+  <div key={gruppo.id} className="group-card">
 
-        {gruppo.photo && (
-          <img src={gruppo.photo} alt={gruppo.name} />
-        )}
+    {gruppo.photo && (
+      <img
+        className="group-photo"
+        src={gruppo.photo}
+        alt={gruppo.name}
+      />
+    )}
 
-        <p>{gruppo.description}</p>
+    <div className="group-info">
 
-        {gruppo.links?.map((link, index) => (
-          <div key={index}>
-            <a href={link} target="_blank" rel="noopener noreferrer">
+      <h3 className="group-title">
+        {gruppo.name}
+      </h3>
+
+      {gruppo.description && (
+        <p className="group-description">
+          {gruppo.description}
+        </p>
+      )}
+
+      <div className="group-links">
+        {gruppo.links
+          ?.filter((link) => link)
+          .map((link, index) => (
+            <a
+              key={index}
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group-link-btn"
+            >
               🔗 Apri gruppo
             </a>
-          </div>
-        ))}
-      {isAdmin && (
-
-  <div
-    style={{
-      marginTop: "10px"
-    }}
-  >
-
-    <button
-      onClick={() => {
-
-        setGruppoInModifica(
-          gruppo.id
-        );
-
-        setNomeGruppoEdit(
-          gruppo.name || ""
-        );
-
-        setDescrizioneGruppoEdit(
-          gruppo.description || ""
-        );
-
-        setFotoGruppoEdit(
-          gruppo.photo || ""
-        );
-
-        setLinkGruppoEdit(
-          gruppo.links?.join(", ") || ""
-        );
-
-      }}
-    >
-      ✏️ Modifica
-    </button>
-
-    <button
-      onClick={() =>
-        eliminaGruppo(gruppo.id)
-      }
-      style={{
-        marginLeft: "10px"
-      }}
-    >
-      🗑 Elimina
-    </button>
-
-  </div>
-
-)}
+          ))}
       </div>
-    ))}
+
+      {isAdmin && (
+        <div className="group-admin-actions">
+
+          <button
+            onClick={() => {
+              setGruppoInModifica(gruppo.id);
+              setNomeGruppoEdit(gruppo.name || "");
+              setDescrizioneGruppoEdit(
+                gruppo.description || ""
+              );
+              setFotoGruppoEdit(gruppo.photo || "");
+              setLinkGruppoEdit(
+                gruppo.links?.join(", ") || ""
+              );
+            }}
+          >
+            ✏️ Modifica
+          </button>
+
+          <button
+            onClick={() =>
+              eliminaGruppo(gruppo.id)
+            }
+          >
+            🗑 Elimina
+          </button>
+
+        </div>
+      )}
+
+    </div>
+  </div>
+))}
+
 {isAdmin && gruppoInModifica && (
 
   <div className="section-card">
@@ -1870,16 +2030,40 @@ return (
       placeholder="Descrizione"
     />
 
+      <label
+      style={{
+        display: "block",
+        marginTop: "10px",
+        color: "#ccc",
+        fontSize: "14px"
+      }}
+    >
+      📷 Foto del gruppo
+    </label>
+
     <input
-      type="text"
-      value={fotoGruppoEdit}
+      key={fotoGruppoEdit ? "con-foto" : "senza-foto"}
+      type="file"
+      accept="image/*"
       onChange={(e) =>
-        setFotoGruppoEdit(
-          e.target.value
-        )
+        selezionaFoto(e, setFotoGruppoEdit)
       }
-      placeholder="URL foto"
     />
+
+    {fotoGruppoEdit && (
+      <div>
+        <img
+          src={fotoGruppoEdit}
+          alt="Anteprima"
+          className="group-photo-preview"
+        />
+        <button
+          onClick={() => setFotoGruppoEdit("")}
+        >
+          Rimuovi foto
+        </button>
+      </div>
+    )}
 
     <input
       type="text"
