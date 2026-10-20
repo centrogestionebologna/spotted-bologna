@@ -15,7 +15,9 @@ function Post({
   segnalaPost,
   isAdmin,
   caricaCommenti,
-  eliminaPost
+  eliminaPost,
+  postFollowers,
+  toggleFollowPost,
 }) {
   const [showLikes, setShowLikes] = useState(false);
 
@@ -49,6 +51,14 @@ function Post({
   const haMessoLike =
     !!user && postLikes.some((like) => like.userId === user.uid);
 
+const seguePost =
+  user &&
+  postFollowers.some(
+    (f) =>
+      f.postId === post.id &&
+      f.userId === user.uid
+  );
+
   const condividi = async () => {
     try {
       if (navigator.share) {
@@ -72,7 +82,39 @@ function Post({
   const confermaElimina = () => eliminaPost(post.id);
 
   return (
-    <div className="post-card">
+
+<div
+  id={`post-${post.id}`}
+  className="post-card"
+>
+
+
+{user && (
+  <div
+    style={{
+      textAlign: "right",
+      marginBottom: "10px"
+    }}
+  >
+    <button
+      onClick={() =>
+        toggleFollowPost(post.id)
+      }
+      style={{
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        fontSize: "22px",
+        color: seguePost
+          ? "#38bdf8"
+          : "#999"
+      }}
+    >
+      🔔
+    </button>
+  </div>
+)}
+
       {isGroupProposal && (
         <h3 style={{ color: "#f5c542", marginBottom: "15px" }}>
           📚 PROPOSTA GRUPPO
@@ -230,6 +272,9 @@ function Post({
         />
       )}
     </div>
+  
+
+
   );
 }
 

@@ -1,6 +1,7 @@
 function Header({
   nickname,
-  logout
+  logout,
+  unreadNotifications
 }) {
   return (
     <div className="header">
@@ -19,18 +20,41 @@ function Header({
         {nickname}
       </div>
 
-      <button
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: "15px"
+  }}
+>
+
+  <button
+    className="notification-btn"
+  >
+    🔔
+    {unreadNotifications > 0 && (
+      <span className="notification-badge">
+        {unreadNotifications}
+      </span>
+    )}
+  </button>
+
+  <button
         className="logout-btn"
         onClick={logout}
       >
         Esci
       </button>
+
+</div>
+
     </>
   )}
 
 </div>
 
     </div>
+
   );
 }
 

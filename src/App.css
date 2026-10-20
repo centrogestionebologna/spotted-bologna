@@ -506,3 +506,173 @@ body {
   }
 
 }
+
+.notification-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:10px 0;
+}
+
+.notification-box {
+  margin-top: 15px;
+}
+
+.notification-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.notification-row input {
+  margin: 0;
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.notification-dropdown {
+  margin-top: 15px;
+}
+
+.notification-dropdown summary {
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  color: #f5c542;
+}
+
+.notification-box {
+  padding-top: 15px;
+}
+
+.notification-box h3 {
+  color: #f5c542;
+  margin-bottom: 12px;
+}
+
+.notification-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+
+  margin: 12px 0;
+}
+
+.notification-row span {
+  color: white;
+  font-size: 18px;
+}
+
+.notification-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.notification-box hr {
+  margin: 20px 0;
+  border: 1px solid #333;
+}
+
+.save-notification-btn {
+  margin-top: 20px;
+}
+
+.newsletter-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  margin: 8px 0;
+}
+
+.newsletter-option span {
+  color: white;
+}
+
+.notification-box label {
+  cursor: pointer;
+}
+
+.notification-box input[type="radio"] {
+  cursor: pointer;
+}
+
+.notification-box input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.notification-card {
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #111;
+}
+
+.notification-card strong {
+  color: #f5c542;
+}
+
+.notification-badge {
+  background: red;
+  color: white;
+
+  border-radius: 50%;
+
+  min-width: 18px;
+  min-height: 18px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 12px;
+
+  margin-left: 5px;
+}
+
+.post-card {
+  transition: 0.3s;
+}
+
+.post-card.highlight {
+  border: 2px solid #f5c542;
+  box-shadow: 0 0 15px #f5c542;
+}
+
+.notifications-layout {
+  display: flex;
+  gap: 25px;
+  margin-top: 15px;
+}
+
+.notifications-left {
+  flex: 1;
+}
+
+.notifications-right {
+  flex: 1;
+  max-height: 350px;
+  overflow-y: auto;
+  border-left: 1px solid #333;
+  padding-left: 20px;
+}
+
+.notification-card {
+  background: #111;
+  border: 1px solid #333;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.notification-unread {
+  border: 2px solid #f5c542;
+}

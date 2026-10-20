@@ -1,9 +1,12 @@
+import { useEffect, useState } from "react";
+
 import Header from "./components/Header";
 import AdminPanel from "./components/AdminPanel";
 import Post from "./components/Post";
-import "./App.css";
 import ProfileCard from "./components/ProfileCard";
-import { useState, useEffect } from "react";
+
+import "./App.css";
+
 import {
   signInWithPopup,
   onAuthStateChanged,
@@ -18,10 +21,19 @@ import {
   collection,
   addDoc,
   deleteDoc,
-  updateDoc
+  updateDoc,
+  query,
+  where,
+  onSnapshot
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
+
+import {
+  notificaNuovoPending,
+  notificaPostSegnalato,
+  notificaNuovoUtente
+} from "./services/pushSender";
 
 // Ridimensiona e comprime l'immagine, restituisce una stringa base64
 const comprimiImmagine = (
@@ -84,6 +96,29 @@ const comprimiImmagine = (
   });
 
 function App() {
+  const creaNotifica = async ({
+  userId,
+  type,
+  title,
+  body,
+  postId = null
+}) => {
+
+  await addDoc(
+    collection(db, "notifications"),
+    {
+      userId,
+      type,
+      title,
+      body,
+      postId,
+      read: false,
+      createdAt:
+        new Date().toISOString()
+    }
+  );
+
+};
   const [nickname, setNickname] = useState("");
   const [savedNickname, setSavedNickname] = useState("");
   const [gruppi, setGruppi] =
@@ -91,6 +126,13 @@ function App() {
   const [nomeGruppo, setNomeGruppo] =
   useState("");
 
+  const [
+  ultimoNumeroNotifiche,
+  setUltimoNumeroNotifiche
+] = useState(0);
+
+  const [postFollowers, setPostFollowers] =
+  useState([]);
   const [
   descrizioneGruppo,
   setDescrizioneGruppo
@@ -123,8 +165,42 @@ function App() {
   const [nuovaParola, setNuovaParola] =
   useState("");
 
+const [notifications, setNotifications] =
+  useState([]);
+
+const [
+  unreadNotifications,
+  setUnreadNotifications
+] = useState(0);
+
+const [
+  showNotifications,
+  setShowNotifications
+] = useState(false);
+
   const [newsletter, setNewsletter] =
   useState("mai");
+  const [notifyComments, setNotifyComments] =
+useState(true);
+
+const [notifyPending, setNotifyPending] =
+  useState(true);
+
+const [notifyReports, setNotifyReports] =
+  useState(true);
+
+const [notifyNewUsers, setNotifyNewUsers] =
+  useState(true);
+
+const [notifyAllComments, setNotifyAllComments] =
+  useState(false);
+
+const [notifyAllLikes, setNotifyAllLikes] =
+  useState(false);
+
+const [notifyLikes, setNotifyLikes] =
+useState(false);
+
   const [ultimoInvio, setUltimoInvio] =
   useState(0);
 
@@ -198,6 +274,7 @@ useEffect(() => {
       if (!currentUser) return;
 
       setUser(currentUser);
+      await caricaFollowers();
       caricaGruppi();
       caricaIscritti();
       const userRef = doc(
@@ -240,15 +317,72 @@ if (userSnap.exists()) {
     );
   }
 
-  if (
-    userSnap.data().newsletter
-  ) {
-    setNewsletter(
-      userSnap.data().newsletter
-    );
-  }
+const datiUtente = userSnap.data();
+
+if (
+  datiUtente.notifyComments !== undefined
+) {
+  setNotifyComments(
+    datiUtente.notifyComments
+  );
+}
+
+if (
+  datiUtente.notifyLikes !== undefined
+) {
+  setNotifyLikes(
+    datiUtente.notifyLikes
+  );
+}
+
+if (
+  datiUtente.notifyPending !== undefined
+) {
+  setNotifyPending(
+    datiUtente.notifyPending
+  );
+}
+
+if (
+  datiUtente.notifyReports !== undefined
+) {
+  setNotifyReports(
+    datiUtente.notifyReports
+  );
+}
+
+if (
+  datiUtente.notifyNewUsers !== undefined
+) {
+  setNotifyNewUsers(
+    datiUtente.notifyNewUsers
+  );
+}
+
+if (
+  datiUtente.notifyAllComments !== undefined
+) {
+  setNotifyAllComments(
+    datiUtente.notifyAllComments
+  );
+}
+
+if (
+  datiUtente.notifyAllLikes !== undefined
+) {
+  setNotifyAllLikes(
+    datiUtente.notifyAllLikes
+  );
+}
+
+if (datiUtente.newsletter) {
+  setNewsletter(
+    datiUtente.newsletter
+  );
+}
 
 }
+
 caricaIscritti();
 caricaUtenti();
     }
@@ -272,6 +406,24 @@ caricaUtenti();
 
     setLikes(lista);
   };
+
+const caricaFollowers = async () => {
+  const snapshot = await getDocs(
+    collection(db, "postFollowers")
+  );
+
+  const lista = [];
+
+  snapshot.forEach((docu) => {
+    lista.push({
+      id: docu.id,
+      ...docu.data()
+    });
+  });
+
+  setPostFollowers(lista);
+};
+
   const caricaIscritti = async () => {
 
   const snapshot = await getDocs(
@@ -409,6 +561,8 @@ setPosts(lista);
       const userSnap = await getDoc(userRef);
 
       if (userSnap.exists()) {
+
+      
       if (userSnap.data().banned) {
 
   alert(
@@ -432,33 +586,125 @@ if (
   caricaParoleVietate();
 }
 
-        if (userSnap.data().nickname) {
-          setSavedNickname(
-            userSnap.data().nickname
-          );
-        if (
-  userSnap.data().newsletter
-) {
-  setNewsletter(
-    userSnap.data().newsletter
+const datiUtente = userSnap.data();
+
+if (datiUtente.nickname) {
+  setSavedNickname(
+    datiUtente.nickname
   );
 }
 
-        }
+if (datiUtente.newsletter) {
+  setNewsletter(
+    datiUtente.newsletter
+  );
+}
+
+if (
+  datiUtente.notifyComments !== undefined
+) {
+  setNotifyComments(
+    datiUtente.notifyComments
+  );
+}
+
+if (
+  datiUtente.notifyLikes !== undefined
+) {
+  setNotifyLikes(
+    datiUtente.notifyLikes
+  );
+}
+
+if (
+  datiUtente.notifyPending !== undefined
+) {
+  setNotifyPending(
+    datiUtente.notifyPending
+  );
+}
+
+if (
+  datiUtente.notifyReports !== undefined
+) {
+  setNotifyReports(
+    datiUtente.notifyReports
+  );
+}
+
+if (
+  datiUtente.notifyNewUsers !== undefined
+) {
+  setNotifyNewUsers(
+    datiUtente.notifyNewUsers
+  );
+}
+
+if (
+  datiUtente.notifyAllComments !== undefined
+) {
+  setNotifyAllComments(
+    datiUtente.notifyAllComments
+  );
+}
+
+if (
+  datiUtente.notifyAllLikes !== undefined
+) {
+  setNotifyAllLikes(
+    datiUtente.notifyAllLikes
+  );
+}
 
       }
 
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-  uid: currentUser.uid,
-  name: currentUser.displayName,
-  email: currentUser.email,
-  role: "user",
-  nickname: "",
-  newsletter: "mai",
-  createdAt: new Date().toISOString()
-});
-      }
+if (!userSnap.exists()) {
+  await setDoc(userRef, {
+    uid: currentUser.uid,
+    name:
+      currentUser.displayName || "",
+    email:
+      currentUser.email || "",
+    role: "user",
+    nickname: "",
+
+    newsletter: "mai",
+
+    notifyComments: true,
+    notifyLikes: false,
+
+    pushEnabled: false,
+
+    notifyPending: false,
+    notifyReports: false,
+    notifyNewUsers: false,
+    notifyAllComments: false,
+    notifyAllLikes: false,
+
+    createdAt:
+      new Date().toISOString()
+  });
+
+  console.log(
+    "Nuovo utente creato:",
+    currentUser.uid
+  );
+
+  try {
+    const risultatoNotifica =
+      await notificaNuovoUtente();
+
+    console.log(
+      "Notifica nuovo utente completata:",
+      risultatoNotifica
+    );
+  } catch (erroreNotifica) {
+    console.error(
+      "Utente creato, ma notifica admin non inviata:",
+      erroreNotifica
+    );
+  }
+}
 
       setUser(currentUser);
 
@@ -510,185 +756,270 @@ if (
   };
 
 const inviaSpotted = async () => {
-
   const adesso = Date.now();
 
-  if (
-    adesso - ultimoInvio < 30000
-  ) {
-
+  if (adesso - ultimoInvio < 30000) {
     alert(
       "Attendi 30 secondi prima di inviare un altro spotted."
     );
-
     return;
   }
 
-  if (spottedText.trim() === "") {
+  const testoPulito = spottedText.trim();
 
+  if (!testoPulito) {
     alert("Scrivi un messaggio");
-
     return;
   }
 
-  if (spottedText.length < 10) {
-
+  if (testoPulito.length < 10) {
     alert(
-      "Lo spotted deve contenere almeno 10 caratteri"
+      "Lo spotted deve contenere almeno 10 caratteri."
+    );
+    return;
+  }
+
+  if (testoPulito.length > 1000) {
+    alert("Massimo 1000 caratteri.");
+    return;
+  }
+
+  const testoMinuscolo =
+    testoPulito.toLowerCase();
+
+  const contieneParolaVietata =
+    paroleVietate.some((parola) => {
+      const parolaVietata =
+        String(parola.word || "")
+          .trim()
+          .toLowerCase();
+
+      return (
+        parolaVietata &&
+        testoMinuscolo.includes(
+          parolaVietata
+        )
+      );
+    });
+
+  const vaInModerazione =
+    contieneParolaVietata ||
+    approvalEnabledPosts;
+
+  const nuovoPost = {
+    text: testoPulito,
+    authorId: user?.uid || "anonimo",
+    createdAt: new Date().toISOString(),
+    status: vaInModerazione
+      ? "pending"
+      : "published",
+    reports: 0,
+    reportedBy: [],
+    flagReason: contieneParolaVietata
+      ? "Parola vietata"
+      : null
+  };
+
+  try {
+    if (vaInModerazione) {
+      const pendingRef = await addDoc(
+        collection(db, "pendingPosts"),
+        nuovoPost
+      );
+
+      console.log(
+        "Pending creato correttamente:",
+        pendingRef.id
+      );
+
+      try {
+        const risultatoNotifica =
+          await notificaNuovoPending(
+            pendingRef.id
+          );
+
+        console.log(
+          "Notifica pending completata:",
+          risultatoNotifica
+        );
+      } catch (erroreNotifica) {
+        console.error(
+          "Pending salvato, ma notifica non inviata:",
+          erroreNotifica
+        );
+      }
+
+      if (isAdmin) {
+        await caricaPendingPosts();
+      }
+
+      alert(
+        "Il tuo spotted è stato inviato per l'approvazione."
+      );
+    } else {
+      const postRef = await addDoc(
+        collection(db, "posts"),
+        nuovoPost
+      );
+
+      console.log(
+        "Spotted pubblicato automaticamente:",
+        postRef.id
+      );
+
+      await caricaPost();
+
+      alert(
+        "Il tuo spotted è stato pubblicato."
+      );
+    }
+
+    setUltimoInvio(Date.now());
+    setSpottedText("");
+  } catch (erroreSalvataggio) {
+    console.error(
+      "Errore durante l'invio dello spotted:",
+      erroreSalvataggio
     );
 
-    return;
-  }
-
-  if (spottedText.length > 1000) {
-
     alert(
-      "Massimo 1000 caratteri"
+      "Non è stato possibile inviare lo spotted. Riprova."
     );
-
-    return;
   }
-
-const testo =
-  spottedText.toLowerCase();
-
-const contieneParolaVietata =
-  paroleVietate.some(
-    (parola) =>
-      testo.includes(
-        parola.word.toLowerCase()
-      )
-  );
-
-const nuovoPost = {
-  text: spottedText,
-  authorId: user ? user.uid : "anonimo",
-  createdAt: new Date().toISOString(),
-  status: "pending",
-  reports: 0,
-  reportedBy: [],
-  flagReason: contieneParolaVietata
-    ? "Parola vietata"
-    : null
 };
 
-const vaInModerazione =
-  contieneParolaVietata ||
-  approvalEnabledPosts;
-  if (vaInModerazione) {
-
-  await addDoc(
-    collection(db, "pendingPosts"),
-    nuovoPost
-  );
-
-} else {
-
-  await addDoc(
-    collection(db, "posts"),
-    nuovoPost
-  );
-
-  caricaPost();
-}
-
-alert(
-  "Il tuo spotted è stato inviato per l'approvazione"
-);
-
-setUltimoInvio(Date.now());
-
-setSpottedText("");
-};
 const inviaPropostaGruppo = async () => {
-
   if (!user) {
-    alert("Devi essere registrato");
+    alert("Devi essere registrato.");
     return;
   }
 
-  if (!propostaDescrizione.trim()) {
-    alert("Inserisci una descrizione");
+  const descrizionePulita =
+    propostaDescrizione.trim();
+
+  const linkPulito =
+    propostaLink.trim();
+
+  if (!descrizionePulita) {
+    alert("Inserisci una descrizione.");
     return;
   }
 
-  if (!propostaLink.trim()) {
-    alert("Inserisci un link");
+  if (!linkPulito) {
+    alert("Inserisci un link.");
+    return;
+  }
+
+  if (
+    !/^https?:\/\/.+/i.test(linkPulito)
+  ) {
+    alert(
+      "Inserisci un link completo che inizi con http:// oppure https://"
+    );
     return;
   }
 
   const contieneParolaVietata =
-    paroleVietate.some(
-      (parola) =>
-        propostaDescrizione
+    paroleVietate.some((parola) => {
+      const parolaVietata =
+        String(parola.word || "")
+          .trim()
+          .toLowerCase();
+
+      return (
+        parolaVietata &&
+        descrizionePulita
           .toLowerCase()
-          .includes(
-            parola.word.toLowerCase()
-          )
-    );
-
-  const nuovaProposta = {
-
-    type: "groupProposal",
-
-    text: propostaDescrizione,
-
-    groupLink: propostaLink,
-
-    requiredLikes:
-      propostaTargetLike,
-
-    authorId: user.uid,
-
-    createdAt:
-      new Date().toISOString(),
-
-    reports: 0,
-
-    reportedBy: [],
-
-    unlockedAt: null,
-
-    flagReason:
-      contieneParolaVietata
-        ? "Parola vietata"
-        : null
-
-  };
+          .includes(parolaVietata)
+      );
+    });
 
   const vaInModerazione =
     contieneParolaVietata ||
     approvalEnabledGroups;
 
-  if (vaInModerazione) {
+  const nuovaProposta = {
+    type: "groupProposal",
+    text: descrizionePulita,
+    groupLink: linkPulito,
+    requiredLikes: Math.max(
+      1,
+      Number(propostaTargetLike) || 10
+    ),
+    authorId: user.uid,
+    createdAt: new Date().toISOString(),
+    status: vaInModerazione
+      ? "pending"
+      : "published",
+    reports: 0,
+    reportedBy: [],
+    unlockedAt: null,
+    flagReason: contieneParolaVietata
+      ? "Parola vietata"
+      : null
+  };
 
-    await addDoc(
-      collection(
-        db,
-        "pendingPosts"
-      ),
-      nuovaProposta
+  try {
+    if (vaInModerazione) {
+      const pendingRef = await addDoc(
+        collection(db, "pendingPosts"),
+        nuovaProposta
+      );
+
+      console.log(
+        "Proposta pending creata:",
+        pendingRef.id
+      );
+
+      try {
+        const risultatoNotifica =
+          await notificaNuovoPending(
+            pendingRef.id
+          );
+
+        console.log(
+          "Notifica proposta completata:",
+          risultatoNotifica
+        );
+      } catch (erroreNotifica) {
+        console.error(
+          "Proposta salvata, ma notifica non inviata:",
+          erroreNotifica
+        );
+      }
+
+      if (isAdmin) {
+        await caricaPendingPosts();
+      }
+
+      alert(
+        "Proposta inviata per l'approvazione."
+      );
+    } else {
+      await addDoc(
+        collection(db, "posts"),
+        nuovaProposta
+      );
+
+      await caricaPost();
+
+      alert("Proposta pubblicata.");
+    }
+
+    setPropostaDescrizione("");
+    setPropostaLink("");
+    setPropostaTargetLike(10);
+    setMostraPropostaGruppo(false);
+  } catch (errore) {
+    console.error(
+      "Errore durante l'invio della proposta:",
+      errore
     );
 
-  } else {
-
-    await addDoc(
-      collection(db, "posts"),
-      nuovaProposta
+    alert(
+      "Non è stato possibile inviare la proposta."
     );
-
   }
-
-  setPropostaDescrizione("");
-  setPropostaLink("");
-  setPropostaTargetLike(10);
-
-  setMostraPropostaGruppo(false);
-
-  caricaPost();
-
-  alert("Proposta inviata");
-
 };
 
 const approvaPost = async (post) => {
@@ -819,10 +1150,79 @@ const inviaCommento = async (postId) => {
   createdAt: new Date().toISOString()
 });
 
+const utentiSnapshot =
+ await getDocs(
+  collection(db,"users")
+ );
+
+utentiSnapshot.forEach(async (u) => {
+
+ if (
+  u.data().role === "admin" &&
+  u.data().notifyAllComments
+ ) {
+
+  await creaNotifica({
+   userId: u.id,
+   type: "comment",
+   title: "💬 Nuovo commento",
+   body: testo,
+   postId
+  });
+
+ }
+
+});
+
+const followersSnapshot = await getDocs(
+  collection(db, "postFollowers")
+);
+
+followersSnapshot.forEach(async (follower) => {
+
+  const datiFollower = follower.data();
+
+  if (
+    datiFollower.postId === postId &&
+    datiFollower.userId !== user.uid
+  ) {
+
+    const userFollower = await getDoc(
+      doc(
+        db,
+        "users",
+        datiFollower.userId
+      )
+    );
+
+    if (
+      userFollower.exists() &&
+      userFollower.data().notifyComments
+    ) {
+
+      await creaNotifica({
+        userId: datiFollower.userId,
+
+        type: "comment",
+
+        title:
+          "💬 Nuovo commento",
+
+        body:
+          `${nicknameUtente} ha commentato uno spotted che segui`,
+
+        postId
+      });
+
+    }
+  }
+});
+
   setCommentInputs({
   ...commentInputs,
   [postId]: ""
 });
+
 
   caricaCommenti();
 };
@@ -857,6 +1257,76 @@ const toggleLike = async (postId) => {
         nickname: userDoc.data().nickname
       }
     );
+
+const followersSnapshot = await getDocs(
+  collection(db, "postFollowers")
+);
+
+followersSnapshot.forEach(async (follower) => {
+
+  const datiFollower = follower.data();
+
+  if (
+    datiFollower.postId === postId &&
+    datiFollower.userId !== user.uid
+  ) {
+
+    const userFollower = await getDoc(
+      doc(
+        db,
+        "users",
+        datiFollower.userId
+      )
+    );
+
+    if (
+      userFollower.exists() &&
+      userFollower.data().notifyLikes
+    ) {
+
+      await creaNotifica({
+        userId: datiFollower.userId,
+
+        type: "like",
+
+        title:
+          "❤️ Nuovo like",
+
+        body:
+          `${userDoc.data().nickname} ha lasciato un like`,
+
+        postId
+      });
+
+    }
+  }
+
+});
+
+const utentiSnapshot =
+ await getDocs(
+  collection(db,"users")
+ );
+
+utentiSnapshot.forEach(async (u) => {
+
+ if (
+  u.data().role === "admin" &&
+  u.data().notifyAllLikes
+ ) {
+
+  await creaNotifica({
+   userId: u.id,
+   type: "like",
+   title: "❤️ Nuovo like",
+   body:
+    userDoc.data().nickname,
+   postId
+  });
+
+ }
+
+});
 
   }
 
@@ -905,107 +1375,215 @@ if (
 
 };
 
-const segnalaPost = async (postId) => {
+const toggleFollowPost = async (
+  postId
+) => {
 
+  if (!user) return;
+
+  const esistente =
+    postFollowers.find(
+      (f) =>
+        f.postId === postId &&
+        f.userId === user.uid
+    );
+
+  if (esistente) {
+
+    await deleteDoc(
+      doc(
+        db,
+        "postFollowers",
+        esistente.id
+      )
+    );
+
+  } else {
+
+    await addDoc(
+      collection(
+        db,
+        "postFollowers"
+      ),
+      {
+        postId,
+        userId: user.uid,
+        createdAt:
+          new Date().toISOString()
+      }
+    );
+  }
+
+  caricaFollowers();
+};
+
+const segnalaPost = async (postId) => {
   if (!user) {
     alert("Devi essere registrato.");
     return;
   }
 
-  const postRef = doc(db, "posts", postId);
+  try {
+    const postRef = doc(
+      db,
+      "posts",
+      postId
+    );
 
-  const postSnap = await getDoc(postRef);
+    const postSnap =
+      await getDoc(postRef);
 
-  if (!postSnap.exists()) return;
-
-  const dati = postSnap.data();
-
-  if (
-    dati.reportedBy &&
-    dati.reportedBy.includes(user.uid)
-  ) {
-
-    const nuoviSegnalatori =
-      dati.reportedBy.filter(
-        (id) => id !== user.uid
-      );
-
-    await updateDoc(postRef, {
-      reports: Math.max(
-        (dati.reports || 1) - 1,
-        0
-      ),
-      reportedBy: nuoviSegnalatori
-    });
-
-    caricaPost();
-
-    return;
-  }
-
-  const conferma = window.confirm(
-    "Vuoi davvero segnalare questo spotted?"
-  );
-
-  if (!conferma) {
-    return;
-  }
-
-  const nuoviReport =
-    (dati.reports || 0) + 1;
-
-  const nuoviSegnalatori = [
-    ...(dati.reportedBy || []),
-    user.uid
-  ];
-
-  await updateDoc(postRef, {
-    reports: nuoviReport,
-    reportedBy: nuoviSegnalatori
-  });
-
-  caricaPost();
-
-  if (nuoviReport >= 3) {
-
-    try {
-
-            await addDoc(
-        collection(db, "pendingPosts"),
-        {
-          ...dati,
-          reports: nuoviReport,
-          reportedBy: nuoviSegnalatori,
-          flagReason:
-            "Segnalato dalla community",
-          originalId: postId   // <-- NUOVA RIGA
-        }
-      );
-
-      await deleteDoc(postRef);
-
+    if (!postSnap.exists()) {
       alert(
-        "Lo spotted è stato rimosso e inviato alla moderazione."
+        "Questo spotted non è più disponibile."
       );
-
-    } catch (error) {
-
-      console.error(
-        "Errore rimozione spotted segnalato:",
-        error
-      );
-
-      alert(
-        "Errore nella rimozione dello spotted."
-      );
-
+      return;
     }
 
-    caricaPost();
+    const dati = postSnap.data();
+
+    const segnalatoriAttuali =
+      Array.isArray(dati.reportedBy)
+        ? dati.reportedBy
+        : [];
+
+    const giaSegnalato =
+      segnalatoriAttuali.includes(
+        user.uid
+      );
+
+    /*
+     * Se l'utente aveva già segnalato il post,
+     * una seconda pressione rimuove la segnalazione.
+     */
+    if (giaSegnalato) {
+      const nuoviSegnalatori =
+        segnalatoriAttuali.filter(
+          (uid) => uid !== user.uid
+        );
+
+      await updateDoc(postRef, {
+        reports:
+          nuoviSegnalatori.length,
+        reportedBy:
+          nuoviSegnalatori
+      });
+
+      await caricaPost();
+
+      return;
+    }
+
+    const conferma =
+      window.confirm(
+        "Vuoi davvero segnalare questo spotted?"
+      );
+
+    if (!conferma) {
+      return;
+    }
+
+    const nuoviSegnalatori = [
+      ...segnalatoriAttuali,
+      user.uid
+    ];
+
+    const nuoviReport =
+      nuoviSegnalatori.length;
+
+    /*
+     * Finché non si raggiungono 3 segnalazioni,
+     * aggiorniamo soltanto il documento pubblico.
+     */
+    if (nuoviReport < 3) {
+      await updateDoc(postRef, {
+        reports: nuoviReport,
+        reportedBy:
+          nuoviSegnalatori
+      });
+
+      await caricaPost();
+
+      alert(
+        "Segnalazione registrata."
+      );
+
+      return;
+    }
+
+    /*
+     * Alla terza segnalazione, lo spotted viene
+     * prima copiato in pendingPosts.
+     */
+    const pendingRef = await addDoc(
+      collection(db, "pendingPosts"),
+      {
+        ...dati,
+        status: "pending",
+        reports: nuoviReport,
+        reportedBy:
+          nuoviSegnalatori,
+        flagReason:
+          "Segnalato dalla community",
+        originalId: postId,
+        movedToModerationAt:
+          new Date().toISOString()
+      }
+    );
+
+    console.log(
+      "Post segnalato spostato in pending:",
+      pendingRef.id
+    );
+
+    /*
+     * Dopo aver creato il pending, chiediamo
+     * al Worker di notificare gli amministratori.
+     *
+     * Se la notifica fallisce, il post resta
+     * comunque correttamente in moderazione.
+     */
+    try {
+      const risultatoNotifica =
+        await notificaPostSegnalato(
+          pendingRef.id
+        );
+
+      console.log(
+        "Notifica segnalazione completata:",
+        risultatoNotifica
+      );
+    } catch (erroreNotifica) {
+      console.error(
+        "Post spostato in moderazione, ma notifica non inviata:",
+        erroreNotifica
+      );
+    }
+
+    /*
+     * Eliminiamo il post pubblico soltanto dopo
+     * averlo copiato correttamente in pendingPosts.
+     */
+    await deleteDoc(postRef);
+
+    await caricaPost();
 
     if (isAdmin) {
-      caricaPendingPosts();
+      await caricaPendingPosts();
     }
+
+    alert(
+      "Lo spotted ha raggiunto 3 segnalazioni ed è stato inviato alla moderazione."
+    );
+  } catch (errore) {
+    console.error(
+      "Errore durante la segnalazione:",
+      errore
+    );
+
+    alert(
+      "Non è stato possibile registrare la segnalazione."
+    );
   }
 };
 
@@ -1139,17 +1717,26 @@ const salvaNewsletter = async () => {
 
   if (!user) return;
 
-  await setDoc(
-    doc(db, "users", user.uid),
-    {
-      newsletter: newsletter
-    },
-    { merge: true }
-  );
+await setDoc(
+  doc(db, "users", user.uid),
+  {
+  newsletter,
+
+  notifyComments,
+  notifyLikes,
+
+  notifyPending,
+  notifyReports,
+  notifyNewUsers,
+  notifyAllComments,
+  notifyAllLikes
+},
+  { merge: true }
+);
 
   alert(
-    "Preferenze newsletter salvate"
-  );
+  "Preferenze notifiche salvate."
+);
 
 };
 
@@ -1353,21 +1940,172 @@ const caricaGruppi = async () => {
   setGruppi(lista);
 };
 
+const caricaNotifiche = async (
+  uid = user?.uid
+) => {
+
+  if (!uid) return;
+
+  const snapshot = await getDocs(
+    collection(db, "notifications")
+  );
+
+  const lista = [];
+
+  snapshot.forEach((docu) => {
+
+    const dati = docu.data();
+
+   if (
+  dati.userId === uid
+) {
+      lista.push({
+        id: docu.id,
+        ...dati
+      });
+    }
+
+  });
+
+  lista.sort(
+    (a, b) =>
+      new Date(b.createdAt) -
+      new Date(a.createdAt)
+  );
+
+  setNotifications(lista);
+
+  setUnreadNotifications(
+    lista.filter(
+      (n) => !n.read
+    ).length
+  );
+
+};
+
+useEffect(() => {
+
+  if (!user) return;
+
+const notificheQuery = query(
+  collection(db, "notifications"),
+  where("userId", "==", user.uid)
+);
+
+const unsubscribe = onSnapshot(
+  notificheQuery,
+  (snapshot) => {
+
+      const lista = [];
+
+      snapshot.forEach((docu) => {
+
+        const dati = docu.data();
+
+        if (dati.userId === user.uid) {
+
+          lista.push({
+            id: docu.id,
+            ...dati
+          });
+
+        }
+
+      });
+
+      lista.sort(
+        (a, b) =>
+          new Date(b.createdAt) -
+          new Date(a.createdAt)
+      );
+
+      setNotifications(lista);
+
+      setUnreadNotifications(
+        lista.filter(
+          (n) => !n.read
+        ).length
+      );
+},
+  (error) => {
+    console.error(
+      "Errore notifiche:",
+      error
+    );
+  }
+);
+
+  return () => unsubscribe();
+
+}, [user]);
+
+const nonLette =
+  notifications.filter(
+    (n) => !n.read
+  ).length;
+
+const markAllNotificationsRead =
+async () => {
+
+  for (const n of notifications) {
+
+    if (!n.read) {
+
+      await updateDoc(
+        doc(
+          db,
+          "notifications",
+          n.id
+        ),
+        {
+          read: true
+        }
+      );
+
+    }
+
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
 return (
   <div className="app-container">
 
     <Header
+  nickname={savedNickname}
+  logout={logout}
+  unreadNotifications={
+    unreadNotifications
+  }
+/>
+{user && savedNickname && (
+  <>
+    <ProfileCard
       nickname={savedNickname}
-      logout={logout}
+      iscritti={numeroIscritti}
+      newsletter={newsletter}
+      setNewsletter={setNewsletter}
+      notifyComments={notifyComments}
+      setNotifyComments={setNotifyComments}
+      notifyLikes={notifyLikes}
+      setNotifyLikes={setNotifyLikes}
+      salvaNewsletter={salvaNewsletter}
+      isAdmin={isAdmin}
+      notifications={notifications}
+      nonLette={nonLette}
+      markAllNotificationsRead={markAllNotificationsRead}
     />
-  {user && savedNickname && (
-  <ProfileCard
-    nickname={savedNickname}
-    iscritti={numeroIscritti}
-    newsletter={newsletter}
-    setNewsletter={setNewsletter}
-    salvaNewsletter={salvaNewsletter}
-  />
+
+  </>
 )}
 
     {!user && (
@@ -1551,6 +2289,8 @@ return (
   <>
 
 <details className="admin-dashboard">
+
+
 <summary
   style={{
     cursor: "pointer",
@@ -1920,6 +2660,12 @@ return (
       }
     />
 
+
+
+
+
+
+
     <button
       onClick={aggiungiGruppo}
     >
@@ -2134,6 +2880,8 @@ setRicercaSpotted(e.target.value)
     caricaCommenti={caricaCommenti}
     eliminaPost={eliminaPost}
     segnalaPost={segnalaPost}
+    postFollowers={postFollowers}
+    toggleFollowPost={toggleFollowPost}
   />
 ))}
 
