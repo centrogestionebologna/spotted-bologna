@@ -713,47 +713,44 @@ if (!userSnap.exists()) {
     }
   };
 
-  const salvaNickname = async () => {
-    if (nickname.trim() === "") {
-      alert("Inserisci un nickname");
+const salvaNickname = async () => {
+  try {
+    if (!user) {
+      alert("Devi effettuare il login.");
       return;
     }
 
-    const usersSnapshot = await getDocs(
-      collection(db, "users")
-    );
+    const nicknamePulito = nickname.trim();
 
-    let nicknameEsistente = false;
-
-    usersSnapshot.forEach((u) => {
-      const data = u.data();
-
-      if (
-        data.nickname &&
-        data.nickname.toLowerCase() ===
-          nickname.toLowerCase()
-      ) {
-        nicknameEsistente = true;
-      }
-    });
-
-    if (nicknameEsistente) {
-      alert("Nickname già utilizzato");
+    if (!nicknamePulito) {
+      alert("Inserisci un nickname");
       return;
     }
 
     await setDoc(
       doc(db, "users", user.uid),
       {
-        nickname: nickname
+        nickname: nicknamePulito
       },
       { merge: true }
     );
 
-    setSavedNickname(nickname);
+    setSavedNickname(nicknamePulito);
 
     alert("Nickname salvato!");
-  };
+
+  } catch (error) {
+    console.error(
+      "Errore salvataggio nickname:",
+      error
+    );
+
+    alert(
+      "Errore: " +
+      (error.message || "sconosciuto")
+    );
+  }
+};
 
 const inviaSpotted = async () => {
   const adesso = Date.now();
