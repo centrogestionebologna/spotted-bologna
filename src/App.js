@@ -276,7 +276,6 @@ useEffect(() => {
       setUser(currentUser);
       await caricaFollowers();
       caricaGruppi();
-      caricaIscritti();
       const userRef = doc(
         db,
         "users",
@@ -307,6 +306,7 @@ if (userSnap.exists()) {
   caricaPendingPosts();
   caricaUtenti();
   caricaParoleVietate();
+
 }
 
   if (
@@ -383,8 +383,6 @@ if (datiUtente.newsletter) {
 
 }
 
-caricaIscritti();
-caricaUtenti();
     }
   );
 
@@ -424,15 +422,32 @@ const caricaFollowers = async () => {
   setPostFollowers(lista);
 };
 
-  const caricaIscritti = async () => {
+const caricaIscritti = async () => {
+  try {
+    const statsSnap = await getDoc(
+      doc(db, "publicStats", "community")
+    );
 
-  const snapshot = await getDocs(
-    collection(db, "users")
-  );
+    if (!statsSnap.exists()) {
+      setNumeroIscritti(0);
+      return;
+    }
 
-  setNumeroIscritti(snapshot.size);
+    setNumeroIscritti(
+      Number(
+        statsSnap.data().numeroIscritti
+      ) || 0
+    );
+  } catch (error) {
+    console.error(
+      "Errore caricamento iscritti:",
+      error
+    );
 
+    setNumeroIscritti(0);
+  }
 };
+
 const caricaUtenti = async () => {
 
   const snapshot = await getDocs(
@@ -584,6 +599,7 @@ if (
   caricaUtenti();
 
   caricaParoleVietate();
+
 }
 
 const datiUtente = userSnap.data();
@@ -715,15 +731,25 @@ if (!userSnap.exists()) {
 
 const salvaNickname = async () => {
   try {
-    if (!user) {
-      alert("Devi effettuare il login.");
+    if (!user?.uid) {
+      alert("Sessione non valida. Accedi nuovamente.");
       return;
     }
 
     const nicknamePulito = nickname.trim();
 
     if (!nicknamePulito) {
-      alert("Inserisci un nickname");
+      alert("Inserisci un nickname.");
+      return;
+    }
+
+    if (nicknamePulito.length < 3) {
+      alert("Il nickname deve contenere almeno 3 caratteri.");
+      return;
+    }
+
+    if (nicknamePulito.length > 30) {
+      alert("Il nickname può contenere massimo 30 caratteri.");
       return;
     }
 
@@ -735,19 +761,20 @@ const salvaNickname = async () => {
       { merge: true }
     );
 
+    setNickname(nicknamePulito);
     setSavedNickname(nicknamePulito);
 
     alert("Nickname salvato!");
-
   } catch (error) {
     console.error(
-      "Errore salvataggio nickname:",
+      "Errore durante il salvataggio del nickname:",
       error
     );
 
     alert(
-      "Errore: " +
-      (error.message || "sconosciuto")
+      error?.code === "permission-denied"
+        ? "Non hai i permessi per salvare il nickname."
+        : "Non è stato possibile salvare il nickname. Riprova."
     );
   }
 };
@@ -2019,18 +2046,16 @@ const unsubscribe = onSnapshot(
       setNotifications(lista);
 
       setUnreadNotifications(
-        lista.filter(
-          (n) => !n.read
-        ).length
+        lista.filter((n) => !n.read).length
       );
-},
-  (error) => {
-    console.error(
-      "Errore notifiche:",
-      error
-    );
-  }
-);
+    },
+    (error) => {
+      console.error(
+        "Errore listener notifiche:",
+        error
+      );
+    }
+  );
 
   return () => unsubscribe();
 
@@ -2063,6 +2088,38 @@ async () => {
 
   }
 };
+
+useEffect(() => {
+  const statsRef = doc(
+    db,
+    "publicStats",
+    "community"
+  );
+
+  const unsubscribe = onSnapshot(
+    statsRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        setNumeroIscritti(0);
+        return;
+      }
+
+      setNumeroIscritti(
+        Number(
+          snapshot.data().numeroIscritti
+        ) || 0
+      );
+    },
+    (error) => {
+      console.error(
+        "Errore listener numero iscritti:",
+        error
+      );
+    }
+  );
+
+  return () => unsubscribe();
+}, []);
 
 
 
