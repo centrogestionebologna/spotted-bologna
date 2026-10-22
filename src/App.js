@@ -24,7 +24,8 @@ import {
   updateDoc,
   query,
   where,
-  onSnapshot
+  onSnapshot,
+  runTransaction
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
@@ -120,6 +121,9 @@ function App() {
 
 };
   const [nickname, setNickname] = useState("");
+  const [salvataggioNickname, setSalvataggioNickname] =
+    useState(false);
+  const [erroreNickname, setErroreNickname] = useState("");
   const [savedNickname, setSavedNickname] = useState("");
   const [gruppi, setGruppi] =
   useState([]);
@@ -260,6 +264,65 @@ const [
   setPropostaTargetLike
 ] = useState(10);
 
+// Crea il profilo in users/{uid} se manca, in modo atomico.
+// Viene usata sia da loginGoogle sia da onAuthStateChanged, così il
+// profilo esiste sempre (anche dopo un ricaricamento a metà registrazione)
+// e la notifica "nuovo utente" parte una sola volta.
+const assicuraProfiloUtente = async (currentUser) => {
+  const userRef = doc(db, "users", currentUser.uid);
+
+  const creato = await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+
+    if (snap.exists()) {
+      return false;
+    }
+
+    transaction.set(userRef, {
+      uid: currentUser.uid,
+      name: currentUser.displayName || "",
+      email: currentUser.email || "",
+      role: "user",
+      nickname: "",
+
+      newsletter: "mai",
+
+      notifyComments: true,
+      notifyLikes: false,
+
+      pushEnabled: false,
+
+      notifyPending: false,
+      notifyReports: false,
+      notifyNewUsers: false,
+      notifyAllComments: false,
+      notifyAllLikes: false,
+
+      createdAt: new Date().toISOString()
+    });
+
+    return true;
+  });
+
+  if (creato) {
+    try {
+      const risultatoNotifica = await notificaNuovoUtente();
+
+      console.log(
+        "Notifica nuovo utente completata:",
+        risultatoNotifica
+      );
+    } catch (erroreNotifica) {
+      console.error(
+        "Utente creato, ma notifica admin non inviata:",
+        erroreNotifica
+      );
+    }
+  }
+
+  return { userRef, creato };
+};
+
 // eslint-disable-next-line react-hooks/exhaustive-deps
 useEffect(() => {
 
@@ -282,8 +345,20 @@ useEffect(() => {
         currentUser.uid
       );
 
-      const userSnap =
+      let userSnap =
         await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        try {
+          await assicuraProfiloUtente(currentUser);
+          userSnap = await getDoc(userRef);
+        } catch (erroreProfilo) {
+          console.error(
+            "Impossibile creare il profilo utente:",
+            erroreProfilo
+          );
+        }
+      }
 
 if (userSnap.exists()) {
 
@@ -573,7 +648,12 @@ setPosts(lista);
 
       const userRef = doc(db, "users", currentUser.uid);
 
-      const userSnap = await getDoc(userRef);
+      let userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        await assicuraProfiloUtente(currentUser);
+        userSnap = await getDoc(userRef);
+      }
 
       if (userSnap.exists()) {
 
@@ -674,53 +754,6 @@ if (
 
       }
 
-if (!userSnap.exists()) {
-  await setDoc(userRef, {
-    uid: currentUser.uid,
-    name:
-      currentUser.displayName || "",
-    email:
-      currentUser.email || "",
-    role: "user",
-    nickname: "",
-
-    newsletter: "mai",
-
-    notifyComments: true,
-    notifyLikes: false,
-
-    pushEnabled: false,
-
-    notifyPending: false,
-    notifyReports: false,
-    notifyNewUsers: false,
-    notifyAllComments: false,
-    notifyAllLikes: false,
-
-    createdAt:
-      new Date().toISOString()
-  });
-
-  console.log(
-    "Nuovo utente creato:",
-    currentUser.uid
-  );
-
-  try {
-    const risultatoNotifica =
-      await notificaNuovoUtente();
-
-    console.log(
-      "Notifica nuovo utente completata:",
-      risultatoNotifica
-    );
-  } catch (erroreNotifica) {
-    console.error(
-      "Utente creato, ma notifica admin non inviata:",
-      erroreNotifica
-    );
-  }
-}
 
       setUser(currentUser);
 
@@ -730,52 +763,82 @@ if (!userSnap.exists()) {
   };
 
 const salvaNickname = async () => {
-  try {
-    if (!user?.uid) {
-      alert("Sessione non valida. Accedi nuovamente.");
-      return;
-    }
+  if (salvataggioNickname) return;
 
-    const nicknamePulito = nickname.trim();
+  setErroreNickname("");
 
-    if (!nicknamePulito) {
-      alert("Inserisci un nickname.");
-      return;
-    }
+  const utenteCorrente = auth.currentUser;
 
-    if (nicknamePulito.length < 3) {
-      alert("Il nickname deve contenere almeno 3 caratteri.");
-      return;
-    }
-
-    if (nicknamePulito.length > 30) {
-      alert("Il nickname può contenere massimo 30 caratteri.");
-      return;
-    }
-
-    await setDoc(
-      doc(db, "users", user.uid),
-      {
-        nickname: nicknamePulito
-      },
-      { merge: true }
+  if (!utenteCorrente?.uid) {
+    setErroreNickname(
+      "Sessione non valida. Esci e accedi di nuovo."
     );
+    return;
+  }
+
+  const nicknamePulito = nickname.trim();
+
+  if (nicknamePulito.length < 3) {
+    setErroreNickname(
+      "Il nickname deve contenere almeno 3 caratteri."
+    );
+    return;
+  }
+
+  if (nicknamePulito.length > 30) {
+    setErroreNickname(
+      "Il nickname può contenere massimo 30 caratteri."
+    );
+    return;
+  }
+
+  setSalvataggioNickname(true);
+
+  try {
+    // Crea il profilo se manca e salva il nickname. Tutto il blocco e'
+    // sotto timeout: se Firestore e' bloccato (adblock, rete, regole)
+    // le operazioni non terminano mai e il bottone sembrerebbe morto.
+    await Promise.race([
+      (async () => {
+        await assicuraProfiloUtente(utenteCorrente);
+
+        await setDoc(
+          doc(db, "users", utenteCorrente.uid),
+          { nickname: nicknamePulito },
+          { merge: true }
+        );
+      })(),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("timeout-salvataggio")),
+          15000
+        )
+      )
+    ]);
 
     setNickname(nicknamePulito);
     setSavedNickname(nicknamePulito);
-
-    alert("Nickname salvato!");
   } catch (error) {
     console.error(
       "Errore durante il salvataggio del nickname:",
       error
     );
 
-    alert(
-      error?.code === "permission-denied"
-        ? "Non hai i permessi per salvare il nickname."
-        : "Non è stato possibile salvare il nickname. Riprova."
-    );
+    if (error?.code === "permission-denied") {
+      setErroreNickname(
+        "Permesso negato da Firestore (controlla le regole su users/{uid})."
+      );
+    } else if (error?.message === "timeout-salvataggio") {
+      setErroreNickname(
+        "Nessuna risposta dal server. Controlla la connessione o disattiva eventuali blocchi pubblicità e riprova."
+      );
+    } else {
+      setErroreNickname(
+        "Non è stato possibile salvare il nickname. Riprova."
+      );
+    }
+  } finally {
+    setSalvataggioNickname(false);
   }
 };
 
@@ -2190,14 +2253,30 @@ return (
 
     <input
       value={nickname}
+      maxLength={30}
       onChange={(e) =>
         setNickname(e.target.value)
       }
-      placeholder="Nickname"
+      onKeyDown={(e) => {
+        if (e.key === "Enter") salvaNickname();
+      }}
+      placeholder="Nickname (3-30 caratteri)"
+      disabled={salvataggioNickname}
     />
 
-    <button onClick={salvaNickname}>
-      Salva nickname
+    {erroreNickname && (
+      <p style={{ color: "#c0392b", margin: "8px 0" }}>
+        {erroreNickname}
+      </p>
+    )}
+
+    <button
+      onClick={salvaNickname}
+      disabled={salvataggioNickname}
+    >
+      {salvataggioNickname
+        ? "Salvataggio..."
+        : "Salva nickname"}
     </button>
 
   </div>

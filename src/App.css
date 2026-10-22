@@ -676,3 +676,12 @@ details summary {
 .notification-unread {
   border: 2px solid #f5c542;
 }
+
+.post-card {
+  transition: 0.3s;
+}
+
+.post-card.highlight {
+  border: 2px solid #f5c542;
+  box-shadow: 0 0 15px #f5c542;
+}
