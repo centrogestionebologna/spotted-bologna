@@ -130,11 +130,6 @@ function App() {
   const [nomeGruppo, setNomeGruppo] =
   useState("");
 
-  const [
-  ultimoNumeroNotifiche,
-  setUltimoNumeroNotifiche
-] = useState(0);
-
   const [postFollowers, setPostFollowers] =
   useState([]);
   const [
@@ -176,11 +171,6 @@ const [
   unreadNotifications,
   setUnreadNotifications
 ] = useState(0);
-
-const [
-  showNotifications,
-  setShowNotifications
-] = useState(false);
 
   const [newsletter, setNewsletter] =
   useState("mai");
@@ -495,32 +485,6 @@ const caricaFollowers = async () => {
   });
 
   setPostFollowers(lista);
-};
-
-const caricaIscritti = async () => {
-  try {
-    const statsSnap = await getDoc(
-      doc(db, "publicStats", "community")
-    );
-
-    if (!statsSnap.exists()) {
-      setNumeroIscritti(0);
-      return;
-    }
-
-    setNumeroIscritti(
-      Number(
-        statsSnap.data().numeroIscritti
-      ) || 0
-    );
-  } catch (error) {
-    console.error(
-      "Errore caricamento iscritti:",
-      error
-    );
-
-    setNumeroIscritti(0);
-  }
 };
 
 const caricaUtenti = async () => {
@@ -2025,49 +1989,6 @@ const caricaGruppi = async () => {
   });
 
   setGruppi(lista);
-};
-
-const caricaNotifiche = async (
-  uid = user?.uid
-) => {
-
-  if (!uid) return;
-
-  const snapshot = await getDocs(
-    collection(db, "notifications")
-  );
-
-  const lista = [];
-
-  snapshot.forEach((docu) => {
-
-    const dati = docu.data();
-
-   if (
-  dati.userId === uid
-) {
-      lista.push({
-        id: docu.id,
-        ...dati
-      });
-    }
-
-  });
-
-  lista.sort(
-    (a, b) =>
-      new Date(b.createdAt) -
-      new Date(a.createdAt)
-  );
-
-  setNotifications(lista);
-
-  setUnreadNotifications(
-    lista.filter(
-      (n) => !n.read
-    ).length
-  );
-
 };
 
 useEffect(() => {
