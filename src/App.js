@@ -30,11 +30,7 @@ import {
 
 import { auth, provider, db } from "./firebase";
 
-import {
-  notificaNuovoPending,
-  notificaPostSegnalato,
-  notificaNuovoUtente
-} from "./services/pushSender";
+import { inviaPushAUtente } from "./services/pushSender";
 
 // Ridimensiona e comprime l'immagine, restituisce una stringa base64
 const comprimiImmagine = (
@@ -98,28 +94,162 @@ const comprimiImmagine = (
 
 function App() {
   const creaNotifica = async ({
-  userId,
-  type,
-  title,
-  body,
-  postId = null
-}) => {
-
-  await addDoc(
-    collection(db, "notifications"),
-    {
+    userId,
+    type,
+    title,
+    body,
+    postId = null,
+    adminOnly = false
+  }) =>
+    addDoc(collection(db, "notifications"), {
       userId,
       type,
       title,
       body,
       postId,
+      adminOnly,
       read: false,
-      createdAt:
-        new Date().toISOString()
-    }
-  );
+      createdAt: new Date().toISOString()
+    });
 
-};
+  const notificaUtente = async ({
+    userId,
+    type,
+    title,
+    body,
+    postId = null,
+    adminOnly = false,
+    inviaPush = true
+  }) => {
+    let notifica;
+
+    try {
+      notifica = await creaNotifica({
+        userId,
+        type,
+        title,
+        body,
+        postId,
+        adminOnly
+      });
+    } catch (errore) {
+      console.error("Impossibile salvare la notifica:", errore);
+    }
+
+    if (!inviaPush) return;
+
+    try {
+      await inviaPushAUtente({
+        recipientUserId: userId,
+        title,
+        body,
+        notificationId: notifica?.id || "",
+        postId: postId || ""
+      });
+    } catch (errore) {
+      // La notifica resta nell'app anche se il push non è attivo.
+      console.warn(
+        "Notifica salvata nell'app; invio push non riuscito:",
+        errore
+      );
+    }
+  };
+
+  const notificaAmministratori = async ({
+    type,
+    title,
+    body,
+    postId = null,
+    inviaPush = true
+  }) => {
+    try {
+      const amministratori = await getDocs(
+        query(
+          collection(db, "users"),
+          where("role", "==", "admin")
+        )
+      );
+
+      const preferenzaPerTipo = {
+        "new-user": "notifyNewUsers",
+        pending: "notifyPending",
+        report: "notifyReports",
+        comment: "notifyAllComments",
+        like: "notifyAllLikes"
+      }[type];
+
+      await Promise.allSettled(
+        amministratori.docs
+          .filter((admin) => {
+            const datiAdmin = admin.data();
+            if (type === "comment" || type === "like") {
+              return datiAdmin[preferenzaPerTipo] === true;
+            }
+
+            return (
+              !datiAdmin.adminNotificationsConfigured ||
+              datiAdmin[preferenzaPerTipo] !== false
+            );
+          })
+          .map((admin) =>
+            notificaUtente({
+              userId: admin.id,
+              type,
+              title,
+              body,
+              postId,
+              adminOnly: true,
+              inviaPush
+            })
+          )
+      );
+    } catch (errore) {
+      console.error(
+        "Impossibile trovare gli amministratori da notificare:",
+        errore
+      );
+    }
+  };
+
+  const notificaFollowerPost = async ({
+    postId,
+    type,
+    title,
+    body,
+    preferenza
+  }) => {
+    const followersSnapshot = await getDocs(
+      query(
+        collection(db, "postFollowers"),
+        where("postId", "==", postId)
+      )
+    );
+
+    await Promise.allSettled(
+      followersSnapshot.docs
+        .filter((follower) => follower.data().userId !== user?.uid)
+        .map(async (follower) => {
+          const followerId = follower.data().userId;
+          const followerSnap = await getDoc(
+            doc(db, "users", followerId)
+          );
+
+          if (
+            followerSnap.exists() &&
+            followerSnap.data()[preferenza] === true
+          ) {
+            await notificaUtente({
+              userId: followerId,
+              type,
+              title,
+              body,
+              postId
+            });
+          }
+        })
+    );
+  };
+
   const [nickname, setNickname] = useState("");
   const [salvataggioNickname, setSalvataggioNickname] =
     useState(false);
@@ -282,9 +412,10 @@ const assicuraProfiloUtente = async (currentUser) => {
 
       pushEnabled: false,
 
-      notifyPending: false,
-      notifyReports: false,
-      notifyNewUsers: false,
+      notifyPending: true,
+      notifyReports: true,
+      notifyNewUsers: true,
+      adminNotificationsConfigured: false,
       notifyAllComments: false,
       notifyAllLikes: false,
 
@@ -296,18 +427,41 @@ const assicuraProfiloUtente = async (currentUser) => {
 
   if (creato) {
     try {
-      const risultatoNotifica = await notificaNuovoUtente();
+      await runTransaction(db, async (transaction) => {
+        const statsRef = doc(db, "publicStats", "community");
+        const statsSnap = await transaction.get(statsRef);
+        const iscrittiAttuali = Number(
+          statsSnap.data()?.numeroIscritti
+        ) || 0;
 
-      console.log(
-        "Notifica nuovo utente completata:",
-        risultatoNotifica
+        transaction.set(
+          statsRef,
+          { numeroIscritti: iscrittiAttuali + 1 },
+          { merge: true }
+        );
+      });
+    } catch (erroreConteggio) {
+      // La creazione del profilo non deve dipendere dai permessi del contatore.
+      console.error(
+        "Profilo creato, ma conteggio iscritti non aggiornato:",
+        erroreConteggio
       );
+    }
+
+    try {
+      await notificaAmministratori({
+        type: "new-user",
+        title: "👤 Nuovo iscritto",
+        body: `${currentUser.displayName || currentUser.email || "Un nuovo utente"} si è iscritto a Spotted Bologna.`,
+        inviaPush: true
+      });
     } catch (erroreNotifica) {
       console.error(
-        "Utente creato, ma notifica admin non inviata:",
+        "Utente creato, ma notifica admin non salvata:",
         erroreNotifica
       );
     }
+
   }
 
   return { userRef, creato };
@@ -400,45 +554,28 @@ if (
   );
 }
 
-if (
-  datiUtente.notifyPending !== undefined
-) {
-  setNotifyPending(
-    datiUtente.notifyPending
-  );
-}
+setNotifyPending(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyPending !== false
+);
 
-if (
-  datiUtente.notifyReports !== undefined
-) {
-  setNotifyReports(
-    datiUtente.notifyReports
-  );
-}
+setNotifyReports(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyReports !== false
+);
 
-if (
-  datiUtente.notifyNewUsers !== undefined
-) {
-  setNotifyNewUsers(
-    datiUtente.notifyNewUsers
-  );
-}
+setNotifyNewUsers(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyNewUsers !== false
+);
 
-if (
-  datiUtente.notifyAllComments !== undefined
-) {
-  setNotifyAllComments(
-    datiUtente.notifyAllComments
-  );
-}
+setNotifyAllComments(
+  datiUtente.notifyAllComments === true
+);
 
-if (
-  datiUtente.notifyAllLikes !== undefined
-) {
-  setNotifyAllLikes(
-    datiUtente.notifyAllLikes
-  );
-}
+setNotifyAllLikes(
+  datiUtente.notifyAllLikes === true
+);
 
 if (datiUtente.newsletter) {
   setNewsletter(
@@ -451,6 +588,7 @@ if (datiUtente.newsletter) {
     }
   );
 
+// eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
   const caricaLike = async () => {
@@ -487,29 +625,64 @@ const caricaFollowers = async () => {
   setPostFollowers(lista);
 };
 
-const caricaUtenti = async () => {
+const aggiornaUtenti = (snapshot) => {
+  const lista = snapshot.docs.map((docu) => ({
+    id: docu.id,
+    ...docu.data()
+  }));
 
+  lista.sort(
+    (a, b) =>
+      new Date(b.createdAt || 0) -
+      new Date(a.createdAt || 0)
+  );
+
+  setUtenti(lista);
+  setNumeroIscritti(snapshot.size);
+};
+
+const caricaUtenti = async () => {
   const snapshot = await getDocs(
     collection(db, "users")
   );
 
-  const lista = [];
-
-  snapshot.forEach((docu) => {
-    lista.push({
-      id: docu.id,
-      ...docu.data()
-    });
-  });
-
-lista.sort(
-  (a, b) =>
-    new Date(b.createdAt || 0) -
-    new Date(a.createdAt || 0)
-);
-
-  setUtenti(lista);
+  aggiornaUtenti(snapshot);
+  await setDoc(
+    doc(db, "publicStats", "community"),
+    { numeroIscritti: snapshot.size },
+    { merge: true }
+  );
 };
+
+// eslint-disable-next-line react-hooks/exhaustive-deps
+useEffect(() => {
+  if (!isAdmin) return undefined;
+
+  const unsubscribe = onSnapshot(
+    collection(db, "users"),
+    (snapshot) => {
+      aggiornaUtenti(snapshot);
+      setDoc(
+        doc(db, "publicStats", "community"),
+        { numeroIscritti: snapshot.size },
+        { merge: true }
+      ).catch((error) => {
+        console.error(
+          "Impossibile sincronizzare il conteggio iscritti:",
+          error
+        );
+      });
+    },
+    (error) => {
+      console.error(
+        "Errore aggiornamento dashboard utenti:",
+        error
+      );
+    }
+  );
+
+  return () => unsubscribe();
+}, [isAdmin]);
 
 const caricaParoleVietate = async () => {
 
@@ -676,45 +849,28 @@ if (
   );
 }
 
-if (
-  datiUtente.notifyPending !== undefined
-) {
-  setNotifyPending(
-    datiUtente.notifyPending
-  );
-}
+setNotifyPending(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyPending !== false
+);
 
-if (
-  datiUtente.notifyReports !== undefined
-) {
-  setNotifyReports(
-    datiUtente.notifyReports
-  );
-}
+setNotifyReports(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyReports !== false
+);
 
-if (
-  datiUtente.notifyNewUsers !== undefined
-) {
-  setNotifyNewUsers(
-    datiUtente.notifyNewUsers
-  );
-}
+setNotifyNewUsers(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyNewUsers !== false
+);
 
-if (
-  datiUtente.notifyAllComments !== undefined
-) {
-  setNotifyAllComments(
-    datiUtente.notifyAllComments
-  );
-}
+setNotifyAllComments(
+  datiUtente.notifyAllComments === true
+);
 
-if (
-  datiUtente.notifyAllLikes !== undefined
-) {
-  setNotifyAllLikes(
-    datiUtente.notifyAllLikes
-  );
-}
+setNotifyAllLikes(
+  datiUtente.notifyAllLikes === true
+);
 
       }
 
@@ -878,27 +1034,18 @@ const inviaSpotted = async () => {
         nuovoPost
       );
 
+      await notificaAmministratori({
+        type: "pending",
+        title: "📝 Nuovo post da approvare",
+        body: (nuovoPost.text || "È arrivato un nuovo contenuto per la moderazione.").slice(0, 240),
+        postId: pendingRef.id,
+        inviaPush: true
+      });
+
       console.log(
         "Pending creato correttamente:",
         pendingRef.id
       );
-
-      try {
-        const risultatoNotifica =
-          await notificaNuovoPending(
-            pendingRef.id
-          );
-
-        console.log(
-          "Notifica pending completata:",
-          risultatoNotifica
-        );
-      } catch (erroreNotifica) {
-        console.error(
-          "Pending salvato, ma notifica non inviata:",
-          erroreNotifica
-        );
-      }
 
       if (isAdmin) {
         await caricaPendingPosts();
@@ -1017,27 +1164,18 @@ const inviaPropostaGruppo = async () => {
         nuovaProposta
       );
 
+      await notificaAmministratori({
+        type: "pending",
+        title: "📝 Nuovo contenuto da approvare",
+        body: (nuovaProposta.text || "È arrivato un nuovo contenuto per la moderazione.").slice(0, 240),
+        postId: pendingRef.id,
+        inviaPush: true
+      });
+
       console.log(
         "Proposta pending creata:",
         pendingRef.id
       );
-
-      try {
-        const risultatoNotifica =
-          await notificaNuovoPending(
-            pendingRef.id
-          );
-
-        console.log(
-          "Notifica proposta completata:",
-          risultatoNotifica
-        );
-      } catch (erroreNotifica) {
-        console.error(
-          "Proposta salvata, ma notifica non inviata:",
-          erroreNotifica
-        );
-      }
 
       if (isAdmin) {
         await caricaPendingPosts();
@@ -1201,72 +1339,20 @@ const inviaCommento = async (postId) => {
   createdAt: new Date().toISOString()
 });
 
-const utentiSnapshot =
- await getDocs(
-  collection(db,"users")
- );
-
-utentiSnapshot.forEach(async (u) => {
-
- if (
-  u.data().role === "admin" &&
-  u.data().notifyAllComments
- ) {
-
-  await creaNotifica({
-   userId: u.id,
-   type: "comment",
-   title: "💬 Nuovo commento",
-   body: testo,
-   postId
-  });
-
- }
-
+await notificaAmministratori({
+  type: "comment",
+  title: "💬 Nuovo commento",
+  body: testo,
+  postId,
+  inviaPush: true
 });
 
-const followersSnapshot = await getDocs(
-  collection(db, "postFollowers")
-);
-
-followersSnapshot.forEach(async (follower) => {
-
-  const datiFollower = follower.data();
-
-  if (
-    datiFollower.postId === postId &&
-    datiFollower.userId !== user.uid
-  ) {
-
-    const userFollower = await getDoc(
-      doc(
-        db,
-        "users",
-        datiFollower.userId
-      )
-    );
-
-    if (
-      userFollower.exists() &&
-      userFollower.data().notifyComments
-    ) {
-
-      await creaNotifica({
-        userId: datiFollower.userId,
-
-        type: "comment",
-
-        title:
-          "💬 Nuovo commento",
-
-        body:
-          `${nicknameUtente} ha commentato uno spotted che segui`,
-
-        postId
-      });
-
-    }
-  }
+await notificaFollowerPost({
+  postId,
+  type: "comment",
+  title: "💬 Nuovo commento",
+  body: `${nicknameUtente} ha commentato uno spotted che segui`,
+  preferenza: "notifyComments"
 });
 
   setCommentInputs({
@@ -1309,74 +1395,20 @@ const toggleLike = async (postId) => {
       }
     );
 
-const followersSnapshot = await getDocs(
-  collection(db, "postFollowers")
-);
-
-followersSnapshot.forEach(async (follower) => {
-
-  const datiFollower = follower.data();
-
-  if (
-    datiFollower.postId === postId &&
-    datiFollower.userId !== user.uid
-  ) {
-
-    const userFollower = await getDoc(
-      doc(
-        db,
-        "users",
-        datiFollower.userId
-      )
-    );
-
-    if (
-      userFollower.exists() &&
-      userFollower.data().notifyLikes
-    ) {
-
-      await creaNotifica({
-        userId: datiFollower.userId,
-
-        type: "like",
-
-        title:
-          "❤️ Nuovo like",
-
-        body:
-          `${userDoc.data().nickname} ha lasciato un like`,
-
-        postId
-      });
-
-    }
-  }
-
+await notificaFollowerPost({
+  postId,
+  type: "like",
+  title: "❤️ Nuovo like",
+  body: `${userDoc.data().nickname} ha lasciato un like`,
+  preferenza: "notifyLikes"
 });
 
-const utentiSnapshot =
- await getDocs(
-  collection(db,"users")
- );
-
-utentiSnapshot.forEach(async (u) => {
-
- if (
-  u.data().role === "admin" &&
-  u.data().notifyAllLikes
- ) {
-
-  await creaNotifica({
-   userId: u.id,
-   type: "like",
-   title: "❤️ Nuovo like",
-   body:
-    userDoc.data().nickname,
-   postId
-  });
-
- }
-
+await notificaAmministratori({
+  type: "like",
+  title: "❤️ Nuovo like",
+  body: userDoc.data().nickname || "Nuovo like",
+  postId,
+  inviaPush: true
 });
 
   }
@@ -1553,6 +1585,14 @@ const segnalaPost = async (postId) => {
           nuoviSegnalatori
       });
 
+      await notificaAmministratori({
+        type: "report",
+        title: "🚩 Nuova segnalazione",
+        body: (dati.text || "Uno spotted è stato segnalato.").slice(0, 240),
+        postId,
+        inviaPush: true
+      });
+
       await caricaPost();
 
       alert(
@@ -1582,34 +1622,18 @@ const segnalaPost = async (postId) => {
       }
     );
 
+    await notificaAmministratori({
+      type: "report",
+      title: "🚩 Post segnalato",
+      body: (dati.text || "Uno spotted ha raggiunto il limite di segnalazioni.").slice(0, 240),
+      postId: pendingRef.id,
+      inviaPush: true
+    });
+
     console.log(
       "Post segnalato spostato in pending:",
       pendingRef.id
     );
-
-    /*
-     * Dopo aver creato il pending, chiediamo
-     * al Worker di notificare gli amministratori.
-     *
-     * Se la notifica fallisce, il post resta
-     * comunque correttamente in moderazione.
-     */
-    try {
-      const risultatoNotifica =
-        await notificaPostSegnalato(
-          pendingRef.id
-        );
-
-      console.log(
-        "Notifica segnalazione completata:",
-        risultatoNotifica
-      );
-    } catch (erroreNotifica) {
-      console.error(
-        "Post spostato in moderazione, ma notifica non inviata:",
-        erroreNotifica
-      );
-    }
 
     /*
      * Eliminiamo il post pubblico soltanto dopo
@@ -1776,11 +1800,14 @@ await setDoc(
   notifyComments,
   notifyLikes,
 
-  notifyPending,
-  notifyReports,
-  notifyNewUsers,
-  notifyAllComments,
-  notifyAllLikes
+  ...(isAdmin && {
+    notifyPending,
+    notifyReports,
+    notifyNewUsers,
+    notifyAllComments,
+    notifyAllLikes,
+    adminNotificationsConfigured: true
+  })
 },
   { merge: true }
 );
@@ -1867,13 +1894,30 @@ const eliminaUtente = async (uid) => {
 
   if (!conferma) return;
 
-  await deleteDoc(
-    doc(db, "users", uid)
+  await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, "users", uid);
+    const statsRef = doc(db, "publicStats", "community");
+    const userSnap = await transaction.get(userRef);
+
+    if (!userSnap.exists()) return;
+
+    const statsSnap = await transaction.get(statsRef);
+    const iscrittiAttuali = Number(
+      statsSnap.data()?.numeroIscritti
+    ) || 0;
+
+    transaction.delete(userRef);
+    transaction.set(
+      statsRef,
+      { numeroIscritti: Math.max(0, iscrittiAttuali - 1) },
+      { merge: true }
+    );
+  });
+
+  await salvaLog(
+    "Elimina utente",
+    uid
   );
-await salvaLog(
-  "Elimina utente",
-  uid
-);
   caricaUtenti();
 };
 
@@ -2010,7 +2054,10 @@ const unsubscribe = onSnapshot(
 
         const dati = docu.data();
 
-        if (dati.userId === user.uid) {
+        if (
+          dati.userId === user.uid &&
+          (!dati.adminOnly || isAdmin)
+        ) {
 
           lista.push({
             id: docu.id,
@@ -2043,7 +2090,7 @@ const unsubscribe = onSnapshot(
 
   return () => unsubscribe();
 
-}, [user]);
+}, [user, isAdmin]);
 
 const nonLette =
   notifications.filter(
@@ -2083,15 +2130,10 @@ useEffect(() => {
   const unsubscribe = onSnapshot(
     statsRef,
     (snapshot) => {
-      if (!snapshot.exists()) {
-        setNumeroIscritti(0);
-        return;
-      }
-
       setNumeroIscritti(
-        Number(
-          snapshot.data().numeroIscritti
-        ) || 0
+        snapshot.exists()
+          ? Number(snapshot.data().numeroIscritti) || 0
+          : 0
       );
     },
     (error) => {
@@ -2136,6 +2178,16 @@ return (
       setNotifyComments={setNotifyComments}
       notifyLikes={notifyLikes}
       setNotifyLikes={setNotifyLikes}
+      notifyAllComments={notifyAllComments}
+      setNotifyAllComments={setNotifyAllComments}
+      notifyAllLikes={notifyAllLikes}
+      setNotifyAllLikes={setNotifyAllLikes}
+      notifyPending={notifyPending}
+      setNotifyPending={setNotifyPending}
+      notifyReports={notifyReports}
+      setNotifyReports={setNotifyReports}
+      notifyNewUsers={notifyNewUsers}
+      setNotifyNewUsers={setNotifyNewUsers}
       salvaNewsletter={salvaNewsletter}
       isAdmin={isAdmin}
       notifications={notifications}

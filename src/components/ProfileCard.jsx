@@ -17,6 +17,17 @@ function ProfileCard({
   notifyLikes,
   setNotifyLikes,
 
+  notifyPending,
+  setNotifyPending,
+  notifyReports,
+  setNotifyReports,
+  notifyNewUsers,
+  setNotifyNewUsers,
+  notifyAllComments,
+  setNotifyAllComments,
+  notifyAllLikes,
+  setNotifyAllLikes,
+
   salvaNewsletter,
 
   notifications,
@@ -189,6 +200,53 @@ const gestisciAttivazionePush = async () => {
                 }
               />
             </div>
+
+            {isAdmin && (
+              <>
+                <hr />
+                <h3>Notifiche amministratore</h3>
+                <div className="notification-row">
+                  <span>Nuovi iscritti</span>
+                  <input
+                    type="checkbox"
+                    checked={notifyNewUsers}
+                    onChange={() => setNotifyNewUsers(!notifyNewUsers)}
+                  />
+                </div>
+                <div className="notification-row">
+                  <span>Nuovi contenuti pending</span>
+                  <input
+                    type="checkbox"
+                    checked={notifyPending}
+                    onChange={() => setNotifyPending(!notifyPending)}
+                  />
+                </div>
+                <div className="notification-row">
+                  <span>Post segnalati</span>
+                  <input
+                    type="checkbox"
+                    checked={notifyReports}
+                    onChange={() => setNotifyReports(!notifyReports)}
+                  />
+                </div>
+                <div className="notification-row">
+                  <span>Tutti i commenti</span>
+                  <input
+                    type="checkbox"
+                    checked={notifyAllComments}
+                    onChange={() => setNotifyAllComments(!notifyAllComments)}
+                  />
+                </div>
+                <div className="notification-row">
+                  <span>Tutti i like</span>
+                  <input
+                    type="checkbox"
+                    checked={notifyAllLikes}
+                    onChange={() => setNotifyAllLikes(!notifyAllLikes)}
+                  />
+                </div>
+              </>
+            )}
 
             <button
               className="save-notification-btn"
