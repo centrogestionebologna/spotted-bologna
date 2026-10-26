@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Header from "./components/Header";
 import AdminPanel from "./components/AdminPanel";
@@ -25,7 +25,8 @@ import {
   query,
   where,
   onSnapshot,
-  runTransaction
+  runTransaction,
+  increment
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
@@ -99,9 +100,10 @@ function App() {
     title,
     body,
     postId = null,
-    adminOnly = false
-  }) =>
-    addDoc(collection(db, "notifications"), {
+    adminOnly = false,
+    notificationId = null
+  }) => {
+    const payload = {
       userId,
       type,
       title,
@@ -110,7 +112,27 @@ function App() {
       adminOnly,
       read: false,
       createdAt: new Date().toISOString()
+    };
+
+    if (!notificationId) {
+      const notificationRef = await addDoc(
+        collection(db, "notifications"),
+        payload
+      );
+      return { id: notificationRef.id, created: true };
+    }
+
+    const notificationRef = doc(db, "notifications", notificationId);
+    return runTransaction(db, async (transaction) => {
+      const existing = await transaction.get(notificationRef);
+      if (existing.exists()) {
+        return { id: notificationRef.id, created: false };
+      }
+
+      transaction.set(notificationRef, payload);
+      return { id: notificationRef.id, created: true };
     });
+  };
 
   const notificaUtente = async ({
     userId,
@@ -119,24 +141,27 @@ function App() {
     body,
     postId = null,
     adminOnly = false,
-    inviaPush = true
+    inviaPush = true,
+    notificationId = null,
+    salvaNotifica = true
   }) => {
     let notifica;
-
     try {
+      if (!salvaNotifica) return;
       notifica = await creaNotifica({
         userId,
         type,
         title,
         body,
         postId,
-        adminOnly
+        adminOnly,
+        notificationId
       });
     } catch (errore) {
       console.error("Impossibile salvare la notifica:", errore);
     }
 
-    if (!inviaPush) return;
+    if (!inviaPush || notifica?.created === false) return;
 
     try {
       await inviaPushAUtente({
@@ -147,13 +172,15 @@ function App() {
         postId: postId || ""
       });
     } catch (errore) {
-      // La notifica resta nell'app anche se il push non è attivo.
       console.warn(
         "Notifica salvata nell'app; invio push non riuscito:",
         errore
       );
     }
   };
+
+  const notificaUtenteRef = useRef(notificaUtente);
+  notificaUtenteRef.current = notificaUtente;
 
   const notificaAmministratori = async ({
     type,
@@ -164,12 +191,8 @@ function App() {
   }) => {
     try {
       const amministratori = await getDocs(
-        query(
-          collection(db, "users"),
-          where("role", "==", "admin")
-        )
+        query(collection(db, "users"), where("role", "==", "admin"))
       );
-
       const preferenzaPerTipo = {
         "new-user": "notifyNewUsers",
         pending: "notifyPending",
@@ -177,37 +200,36 @@ function App() {
         comment: "notifyAllComments",
         like: "notifyAllLikes"
       }[type];
+      const eventoAdminRiservato = ["new-user", "pending", "report"].includes(type);
 
       await Promise.allSettled(
-        amministratori.docs
-          .filter((admin) => {
-            const datiAdmin = admin.data();
-            if (type === "comment" || type === "like") {
-              return datiAdmin[preferenzaPerTipo] === true;
-            }
+        amministratori.docs.map((admin) => {
+          const datiAdmin = admin.data();
+          const preferenzaAttiva = eventoAdminRiservato
+            ? (
+                !datiAdmin.adminNotificationsConfigured ||
+                datiAdmin[preferenzaPerTipo] !== false
+              )
+            : datiAdmin[preferenzaPerTipo] === true;
 
-            return (
-              !datiAdmin.adminNotificationsConfigured ||
-              datiAdmin[preferenzaPerTipo] !== false
-            );
-          })
-          .map((admin) =>
-            notificaUtente({
-              userId: admin.id,
-              type,
-              title,
-              body,
-              postId,
-              adminOnly: true,
-              inviaPush
-            })
-          )
+          return notificaUtente({
+            userId: admin.id,
+            type,
+            title,
+            body,
+            postId,
+            adminOnly: true,
+            notificationId:
+              type === "pending" && postId
+                ? `pending_${postId}_${admin.id}`
+                : null,
+            inviaPush: inviaPush && preferenzaAttiva,
+            salvaNotifica: preferenzaAttiva
+          });
+        })
       );
     } catch (errore) {
-      console.error(
-        "Impossibile trovare gli amministratori da notificare:",
-        errore
-      );
+      console.error("Impossibile trovare gli amministratori da notificare:", errore);
     }
   };
 
@@ -262,6 +284,7 @@ function App() {
 
   const [postFollowers, setPostFollowers] =
   useState([]);
+const [followRequestInProgress, setFollowRequestInProgress] = useState({});
   const [
   descrizioneGruppo,
   setDescrizioneGruppo
@@ -279,8 +302,7 @@ function App() {
   const [comments, setComments] = useState([]);
   const [likes, setLikes] = useState([]);
   const [numeroIscritti, setNumeroIscritti] =
-  useState(0);
-  const [postVisibili, setPostVisibili] =
+  useState(0);  const [postVisibili, setPostVisibili] =
   useState(10);
   const [
   postScreenshotVisibili,
@@ -301,6 +323,9 @@ const [
   unreadNotifications,
   setUnreadNotifications
 ] = useState(0);
+const conteggioUtentiSincronizzatoRef = useRef(null);
+const sincronizzazioneConteggioUtentiRef = useRef(Promise.resolve());
+const pendingNotificheInCorsoRef = useRef(new Set());
 
   const [newsletter, setNewsletter] =
   useState("mai");
@@ -384,19 +409,21 @@ const [
   setPropostaTargetLike
 ] = useState(10);
 
-// Crea il profilo in users/{uid} se manca, in modo atomico.
-// Viene usata sia da loginGoogle sia da onAuthStateChanged, così il
-// profilo esiste sempre (anche dopo un ricaricamento a metà registrazione)
-// e la notifica "nuovo utente" parte una sola volta.
+// Crea il profilo e aggiorna il contatore comunità in modo atomico.
+// Viene usata sia da loginGoogle sia da onAuthStateChanged.
 const assicuraProfiloUtente = async (currentUser) => {
   const userRef = doc(db, "users", currentUser.uid);
-
   const creato = await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(userRef);
 
     if (snap.exists()) {
       return false;
     }
+const statsRef = doc(
+    db,
+    "publicStats",
+    "community"
+  );
 
     transaction.set(userRef, {
       uid: currentUser.uid,
@@ -421,33 +448,16 @@ const assicuraProfiloUtente = async (currentUser) => {
 
       createdAt: new Date().toISOString()
     });
+    transaction.set(
+      statsRef,
+      { numeroIscritti: increment(1) },
+      { merge: true }
+    );
 
     return true;
   });
 
   if (creato) {
-    try {
-      await runTransaction(db, async (transaction) => {
-        const statsRef = doc(db, "publicStats", "community");
-        const statsSnap = await transaction.get(statsRef);
-        const iscrittiAttuali = Number(
-          statsSnap.data()?.numeroIscritti
-        ) || 0;
-
-        transaction.set(
-          statsRef,
-          { numeroIscritti: iscrittiAttuali + 1 },
-          { merge: true }
-        );
-      });
-    } catch (erroreConteggio) {
-      // La creazione del profilo non deve dipendere dai permessi del contatore.
-      console.error(
-        "Profilo creato, ma conteggio iscritti non aggiornato:",
-        erroreConteggio
-      );
-    }
-
     try {
       await notificaAmministratori({
         type: "new-user",
@@ -523,7 +533,6 @@ if (userSnap.exists()) {
 ) {
   setIsAdmin(true);
   caricaPendingPosts();
-  caricaUtenti();
   caricaParoleVietate();
 
 }
@@ -638,40 +647,43 @@ const aggiornaUtenti = (snapshot) => {
   );
 
   setUtenti(lista);
-  setNumeroIscritti(snapshot.size);
-};
-
-const caricaUtenti = async () => {
-  const snapshot = await getDocs(
-    collection(db, "users")
-  );
-
-  aggiornaUtenti(snapshot);
-  await setDoc(
-    doc(db, "publicStats", "community"),
-    { numeroIscritti: snapshot.size },
-    { merge: true }
-  );
 };
 
 // eslint-disable-next-line react-hooks/exhaustive-deps
 useEffect(() => {
   if (!isAdmin) return undefined;
 
+  conteggioUtentiSincronizzatoRef.current = null;
   const unsubscribe = onSnapshot(
     collection(db, "users"),
     (snapshot) => {
       aggiornaUtenti(snapshot);
-      setDoc(
-        doc(db, "publicStats", "community"),
-        { numeroIscritti: snapshot.size },
-        { merge: true }
-      ).catch((error) => {
-        console.error(
-          "Impossibile sincronizzare il conteggio iscritti:",
-          error
-        );
-      });
+      if (snapshot.metadata.fromCache) return;
+
+      const conteggioReale = snapshot.size;
+      setNumeroIscritti(conteggioReale);
+      if (conteggioUtentiSincronizzatoRef.current === conteggioReale) return;
+
+      conteggioUtentiSincronizzatoRef.current = conteggioReale;
+      sincronizzazioneConteggioUtentiRef.current =
+        sincronizzazioneConteggioUtentiRef.current
+          .catch(() => {})
+          .then(() =>
+            setDoc(
+              doc(db, "publicStats", "community"),
+              { numeroIscritti: conteggioReale },
+              { merge: true }
+            )
+          )
+          .catch((error) => {
+            if (conteggioUtentiSincronizzatoRef.current === conteggioReale) {
+              conteggioUtentiSincronizzatoRef.current = null;
+            }
+            console.error(
+              "Impossibile sincronizzare il conteggio iscritti:",
+              error
+            );
+          });
     },
     (error) => {
       console.error(
@@ -760,6 +772,98 @@ setPosts(lista);
     setPendingPosts(lista);
   };
 
+  useEffect(() => {
+    if (!isAdmin || !user) return undefined;
+
+    let primoSnapshotServer = true;
+    const unsubscribe = onSnapshot(
+      collection(db, "pendingPosts"),
+      async (snapshot) => {
+        if (snapshot.metadata.fromCache) return;
+        setPendingPosts(snapshot.docs.map((postDoc) => ({
+          id: postDoc.id,
+          ...postDoc.data()
+        })));
+
+        const pendingDaNotificare = primoSnapshotServer
+          ? snapshot.docs
+          : snapshot.docChanges()
+              .filter((change) =>
+                change.type === "added" && !change.doc.data().originalId
+              )
+              .map((change) => change.doc);
+        primoSnapshotServer = false;
+        if (pendingDaNotificare.length === 0) return;
+
+        const nuoviDaNotificare = pendingDaNotificare.filter((pendingDoc) => {
+          const notificationId = `pending_${pendingDoc.id}_${user.uid}`;
+          if (pendingNotificheInCorsoRef.current.has(notificationId)) return false;
+          pendingNotificheInCorsoRef.current.add(notificationId);
+          return true;
+        });
+        if (nuoviDaNotificare.length === 0) return;
+
+        let preferenzaAttiva = true;
+        try {
+          const profiloAdmin = await getDoc(doc(db, "users", user.uid));
+          const datiAdmin = profiloAdmin.data();
+          if (datiAdmin?.adminNotificationsConfigured) {
+            preferenzaAttiva = datiAdmin.notifyPending !== false;
+          }
+        } catch (error) {
+          console.error(
+            "Impossibile verificare la preferenza per le notifiche pending:",
+            error
+          );
+        }
+        if (!preferenzaAttiva) {
+          nuoviDaNotificare.forEach((pendingDoc) =>
+            pendingNotificheInCorsoRef.current.delete(
+              `pending_${pendingDoc.id}_${user.uid}`
+            )
+          );
+          return;
+        }
+
+        await Promise.allSettled(
+          nuoviDaNotificare.map((pendingDoc) => {
+            const pending = {
+              id: pendingDoc.id,
+              ...pendingDoc.data()
+            };
+            return notificaUtenteRef.current({
+              userId: user.uid,
+              type: "pending",
+              title: pending.type === "groupProposal"
+                ? "📝 Nuovo contenuto da approvare"
+                : "📝 Nuovo post da approvare",
+              body: (
+                pending.text ||
+                "È arrivato un nuovo contenuto per la moderazione."
+              ).slice(0, 240),
+              postId: pending.id,
+              adminOnly: true,
+              notificationId: `pending_${pending.id}_${user.uid}`,
+              inviaPush: true
+            }).finally(() => {
+              pendingNotificheInCorsoRef.current.delete(
+                `pending_${pending.id}_${user.uid}`
+              );
+            });
+          })
+        );
+      },
+      (error) => {
+        console.error(
+          "Errore aggiornamento pending in tempo reale:",
+          error
+        );
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isAdmin, user]);
+
   const caricaCommenti = async () => {
     const snapshot = await getDocs(
       collection(db, "comments")
@@ -813,7 +917,6 @@ if (
 
   caricaPendingPosts();
 
-  caricaUtenti();
 
   caricaParoleVietate();
 
@@ -1033,15 +1136,6 @@ const inviaSpotted = async () => {
         collection(db, "pendingPosts"),
         nuovoPost
       );
-
-      await notificaAmministratori({
-        type: "pending",
-        title: "📝 Nuovo post da approvare",
-        body: (nuovoPost.text || "È arrivato un nuovo contenuto per la moderazione.").slice(0, 240),
-        postId: pendingRef.id,
-        inviaPush: true
-      });
-
       console.log(
         "Pending creato correttamente:",
         pendingRef.id
@@ -1163,15 +1257,6 @@ const inviaPropostaGruppo = async () => {
         collection(db, "pendingPosts"),
         nuovaProposta
       );
-
-      await notificaAmministratori({
-        type: "pending",
-        title: "📝 Nuovo contenuto da approvare",
-        body: (nuovaProposta.text || "È arrivato un nuovo contenuto per la moderazione.").slice(0, 240),
-        postId: pendingRef.id,
-        inviaPush: true
-      });
-
       console.log(
         "Proposta pending creata:",
         pendingRef.id
@@ -1461,43 +1546,41 @@ if (
 const toggleFollowPost = async (
   postId
 ) => {
+  if (!user || followRequestInProgress[postId]) return;
 
-  if (!user) return;
-
-  const esistente =
-    postFollowers.find(
-      (f) =>
-        f.postId === postId &&
-        f.userId === user.uid
+  setFollowRequestInProgress((current) => ({ ...current, [postId]: true }));
+  try {
+    const esistente = postFollowers.find(
+      (follower) =>
+        follower.postId === postId &&
+        follower.userId === user.uid
     );
 
-  if (esistente) {
-
-    await deleteDoc(
-      doc(
-        db,
-        "postFollowers",
-        esistente.id
-      )
-    );
-
-  } else {
-
-    await addDoc(
-      collection(
-        db,
-        "postFollowers"
-      ),
-      {
-        postId,
-        userId: user.uid,
-        createdAt:
-          new Date().toISOString()
-      }
-    );
+    if (esistente) {
+      await deleteDoc(doc(db, "postFollowers", esistente.id));
+      setPostFollowers((current) =>
+        current.filter((follower) => follower.id !== esistente.id)
+      );
+    } else {
+      const followerRef = await addDoc(
+        collection(db, "postFollowers"),
+        {
+          postId,
+          userId: user.uid,
+          createdAt: new Date().toISOString()
+        }
+      );
+      setPostFollowers((current) => [
+        ...current,
+        { id: followerRef.id, postId, userId: user.uid }
+      ]);
+    }
+  } finally {
+    setFollowRequestInProgress((current) => ({
+      ...current,
+      [postId]: false
+    }));
   }
-
-  caricaFollowers();
 };
 
 const segnalaPost = async (postId) => {
@@ -1751,7 +1834,6 @@ await salvaLog(
     : "Ban utente",
   uid
 );
-  caricaUtenti();
 };
 
 const toggleApprovalPosts =
@@ -1918,7 +2000,6 @@ const eliminaUtente = async (uid) => {
     "Elimina utente",
     uid
   );
-  caricaUtenti();
 };
 
 const selezionaFoto = async (e, setFoto) => {
@@ -2037,9 +2118,7 @@ const caricaGruppi = async () => {
 
 useEffect(() => {
 
-  if (!user) return;
-
-const notificheQuery = query(
+  if (!user) return;const notificheQuery = query(
   collection(db, "notifications"),
   where("userId", "==", user.uid)
 );
@@ -2121,6 +2200,8 @@ async () => {
 };
 
 useEffect(() => {
+  if (isAdmin) return undefined;
+
   const statsRef = doc(
     db,
     "publicStats",
@@ -2130,6 +2211,7 @@ useEffect(() => {
   const unsubscribe = onSnapshot(
     statsRef,
     (snapshot) => {
+      if (snapshot.metadata.fromCache) return;
       setNumeroIscritti(
         snapshot.exists()
           ? Number(snapshot.data().numeroIscritti) || 0
@@ -2145,7 +2227,7 @@ useEffect(() => {
   );
 
   return () => unsubscribe();
-}, []);
+}, [isAdmin]);
 
 
 
@@ -2162,16 +2244,21 @@ return (
 
     <Header
   nickname={savedNickname}
-  logout={logout}
-  unreadNotifications={
+  logout={logout}      unreadNotifications={
     unreadNotifications
   }
+  onNotificationsClick={() => {
+    document.getElementById("profile-notifications")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+    document.getElementById("profile-notifications")?.setAttribute("open", "true");
+  }}
 />
 {user && savedNickname && (
-  <>
-    <ProfileCard
+  <>      <ProfileCard
       nickname={savedNickname}
-      iscritti={numeroIscritti}
+      iscritti={isAdmin ? utenti.length : numeroIscritti}
       newsletter={newsletter}
       setNewsletter={setNewsletter}
       notifyComments={notifyComments}
@@ -2520,8 +2607,7 @@ return (
 
 </details>
 
-<details>
-<summary>
+<details><summary>
 👥 Utenti ({utenti.length})
 </summary>
 
@@ -2988,6 +3074,7 @@ setRicercaSpotted(e.target.value)
     segnalaPost={segnalaPost}
     postFollowers={postFollowers}
     toggleFollowPost={toggleFollowPost}
+    followRequestInProgress={followRequestInProgress}
   />
 ))}
 

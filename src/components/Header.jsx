@@ -1,7 +1,8 @@
 function Header({
   nickname,
   logout,
-  unreadNotifications
+  unreadNotifications,
+  onNotificationsClick
 }) {
   return (
     <div className="header">
@@ -29,7 +30,10 @@ function Header({
 >
 
   <button
+    type="button"
     className="notification-btn"
+    aria-label="Apri notifiche"
+    onClick={onNotificationsClick}
   >
     🔔
     {unreadNotifications > 0 && (

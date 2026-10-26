@@ -18,6 +18,7 @@ function Post({
   eliminaPost,
   postFollowers,
   toggleFollowPost,
+  followRequestInProgress,
 }) {
   const [showLikes, setShowLikes] = useState(false);
 
@@ -90,25 +91,14 @@ const seguePost =
 
 
 {user && (
-  <div
-    style={{
-      textAlign: "right",
-      marginBottom: "10px"
-    }}
-  >
+  <div className="post-follow-control">
     <button
-      onClick={() =>
-        toggleFollowPost(post.id)
-      }
-      style={{
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        fontSize: "22px",
-        color: seguePost
-          ? "#38bdf8"
-          : "#999"
-      }}
+      type="button"
+      className={`post-follow-btn ${seguePost ? "is-following" : ""}`}
+      aria-label={seguePost ? "Smetti di seguire gli aggiornamenti" : "Segui gli aggiornamenti"}
+      aria-pressed={Boolean(seguePost)}
+      disabled={Boolean(followRequestInProgress?.[post.id])}
+      onClick={() => toggleFollowPost(post.id)}
     >
       🔔
     </button>
