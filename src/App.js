@@ -13,8 +13,6 @@ import {
   signOut
 } from "firebase/auth";
 
-import { getFunctions, httpsCallable } from "firebase/functions";
-
 import {
   doc,
   getDoc,
@@ -27,7 +25,8 @@ import {
   query,
   where,
   onSnapshot,
-  runTransaction
+  runTransaction,
+  increment
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
@@ -324,6 +323,8 @@ const [
   unreadNotifications,
   setUnreadNotifications
 ] = useState(0);
+const conteggioUtentiSincronizzatoRef = useRef(null);
+const sincronizzazioneConteggioUtentiRef = useRef(Promise.resolve());
 const pendingNotificheInCorsoRef = useRef(new Set());
 
   const [newsletter, setNewsletter] =
@@ -419,6 +420,7 @@ const assicuraProfiloUtente = async (currentUser) => {
       return false;
     }
 
+    const statsRef = doc(db, "publicStats", "community");
     transaction.set(userRef, {
       uid: currentUser.uid,
       name: currentUser.displayName || "",
@@ -442,6 +444,12 @@ const assicuraProfiloUtente = async (currentUser) => {
 
       createdAt: new Date().toISOString()
     });
+    transaction.set(
+      statsRef,
+      { numeroIscritti: increment(1) },
+      { merge: true }
+    );
+
     return true;
   });
 
@@ -641,6 +649,7 @@ const aggiornaUtenti = (snapshot) => {
 useEffect(() => {
   if (!isAdmin) return undefined;
 
+  conteggioUtentiSincronizzatoRef.current = null;
   const unsubscribe = onSnapshot(
     collection(db, "users"),
     { includeMetadataChanges: true },
@@ -650,6 +659,28 @@ useEffect(() => {
 
       const conteggioReale = snapshot.size;
       setNumeroIscritti(conteggioReale);
+      if (conteggioUtentiSincronizzatoRef.current === conteggioReale) return;
+
+      conteggioUtentiSincronizzatoRef.current = conteggioReale;
+      sincronizzazioneConteggioUtentiRef.current =
+        sincronizzazioneConteggioUtentiRef.current
+          .catch(() => {})
+          .then(() =>
+            setDoc(
+              doc(db, "publicStats", "community"),
+              { numeroIscritti: conteggioReale },
+              { merge: true }
+            )
+          )
+          .catch((error) => {
+            if (conteggioUtentiSincronizzatoRef.current === conteggioReale) {
+              conteggioUtentiSincronizzatoRef.current = null;
+            }
+            console.error(
+              "Impossibile sincronizzare il conteggio iscritti:",
+              error
+            );
+          });
     },
     (error) => {
       console.error(
@@ -1952,15 +1983,12 @@ const eliminaUtente = async (uid) => {
 
     if (!userSnap.exists()) return;
 
-    const statsSnap = await transaction.get(statsRef);
-    const iscrittiAttuali = Number(
-      statsSnap.data()?.numeroIscritti
-    ) || 0;
+    await transaction.get(statsRef);
 
     transaction.delete(userRef);
     transaction.set(
       statsRef,
-      { numeroIscritti: Math.max(0, iscrittiAttuali - 1) },
+      { numeroIscritti: increment(-1) },
       { merge: true }
     );
   });
@@ -2177,25 +2205,6 @@ useEffect(() => {
     "community"
   );
 
-  let attivo = true;
-  const aggiornaConteggio = httpsCallable(
-    getFunctions(),
-    "leggiConteggioIscritti"
-  );
-
-  aggiornaConteggio()
-    .then(({ data }) => {
-      if (attivo && Number.isFinite(data?.numeroIscritti)) {
-        setNumeroIscritti(data.numeroIscritti);
-      }
-    })
-    .catch((error) => {
-      console.error(
-        "Impossibile riallineare il conteggio iscritti dal server:",
-        error
-      );
-    });
-
   const unsubscribe = onSnapshot(
     statsRef,
     { includeMetadataChanges: true },
@@ -2215,10 +2224,7 @@ useEffect(() => {
     }
   );
 
-  return () => {
-    attivo = false;
-    unsubscribe();
-  };
+  return () => unsubscribe();
 }, [user, isAdmin]);
 
 
