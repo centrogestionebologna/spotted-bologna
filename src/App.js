@@ -1559,7 +1559,10 @@ const toggleFollowPost = async (
     if (esistente) {
       await deleteDoc(doc(db, "postFollowers", esistente.id));
       setPostFollowers((current) =>
-        current.filter((follower) => follower.id !== esistente.id)
+        current.filter(
+          (follower) =>
+            follower.postId !== postId || follower.userId !== user.uid
+        )
       );
     } else {
       const followerRef = await addDoc(
@@ -2200,7 +2203,7 @@ async () => {
 };
 
 useEffect(() => {
-  if (isAdmin) return undefined;
+  if (!user || isAdmin) return undefined;
 
   const statsRef = doc(
     db,
@@ -2210,6 +2213,7 @@ useEffect(() => {
 
   const unsubscribe = onSnapshot(
     statsRef,
+    { includeMetadataChanges: true },
     (snapshot) => {
       if (snapshot.metadata.fromCache) return;
       setNumeroIscritti(
@@ -2227,7 +2231,7 @@ useEffect(() => {
   );
 
   return () => unsubscribe();
-}, [isAdmin]);
+}, [user, isAdmin]);
 
 
 

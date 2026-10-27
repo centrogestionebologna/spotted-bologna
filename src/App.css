@@ -164,7 +164,6 @@ hr {
   transition: border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.post-follow-btn:hover,
 .post-follow-btn.is-following {
   border-color: #38bdf8;
   color: #38bdf8;
