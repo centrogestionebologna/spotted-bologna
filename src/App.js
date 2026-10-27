@@ -656,6 +656,7 @@ useEffect(() => {
   conteggioUtentiSincronizzatoRef.current = null;
   const unsubscribe = onSnapshot(
     collection(db, "users"),
+    { includeMetadataChanges: true },
     (snapshot) => {
       aggiornaUtenti(snapshot);
       if (snapshot.metadata.fromCache) return;
