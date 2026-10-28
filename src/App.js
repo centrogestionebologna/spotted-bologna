@@ -195,12 +195,13 @@ function App() {
       );
       const preferenzaPerTipo = {
         "new-user": "notifyNewUsers",
+        "new-post": "notifyNewPosts",
         pending: "notifyPending",
         report: "notifyReports",
         comment: "notifyAllComments",
         like: "notifyAllLikes"
       }[type];
-      const eventoAdminRiservato = ["new-user", "pending", "report"].includes(type);
+      const eventoAdminRiservato = ["new-user", "new-post", "pending", "report"].includes(type);
 
       await Promise.allSettled(
         amministratori.docs.map((admin) => {
@@ -220,9 +221,11 @@ function App() {
             postId,
             adminOnly: true,
             notificationId:
-              type === "pending" && postId
+              postId && type === "pending"
                 ? `pending_${postId}_${admin.id}`
-                : null,
+                : postId && type === "new-post"
+                  ? `new-post_${postId}_${admin.id}`
+                  : null,
             inviaPush: inviaPush && preferenzaAttiva,
             salvaNotifica: preferenzaAttiva
           });
@@ -341,6 +344,9 @@ const [notifyReports, setNotifyReports] =
 const [notifyNewUsers, setNotifyNewUsers] =
   useState(true);
 
+const [notifyNewPosts, setNotifyNewPosts] =
+  useState(true);
+
 const [notifyAllComments, setNotifyAllComments] =
   useState(false);
 
@@ -438,6 +444,7 @@ const assicuraProfiloUtente = async (currentUser) => {
       notifyPending: true,
       notifyReports: true,
       notifyNewUsers: true,
+      notifyNewPosts: true,
       adminNotificationsConfigured: false,
       notifyAllComments: false,
       notifyAllLikes: false,
@@ -572,6 +579,11 @@ setNotifyReports(
 setNotifyNewUsers(
   !datiUtente.adminNotificationsConfigured ||
   datiUtente.notifyNewUsers !== false
+);
+
+setNotifyNewPosts(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyNewPosts !== false
 );
 
 setNotifyAllComments(
@@ -964,6 +976,11 @@ setNotifyNewUsers(
   datiUtente.notifyNewUsers !== false
 );
 
+setNotifyNewPosts(
+  !datiUtente.adminNotificationsConfigured ||
+  datiUtente.notifyNewPosts !== false
+);
+
 setNotifyAllComments(
   datiUtente.notifyAllComments === true
 );
@@ -1151,6 +1168,14 @@ const inviaSpotted = async () => {
         nuovoPost
       );
 
+      await notificaAmministratori({
+        type: "new-post",
+        title: "📝 Nuovo spotted pubblicato",
+        body: (nuovoPost.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
+        postId: postRef.id,
+        inviaPush: true
+      });
+
       console.log(
         "Spotted pubblicato automaticamente:",
         postRef.id
@@ -1267,10 +1292,18 @@ const inviaPropostaGruppo = async () => {
         "Proposta inviata per l'approvazione."
       );
     } else {
-      await addDoc(
+      const postRef = await addDoc(
         collection(db, "posts"),
         nuovaProposta
       );
+
+      await notificaAmministratori({
+        type: "new-post",
+        title: "📝 Nuovo spotted pubblicato",
+        body: (nuovaProposta.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
+        postId: postRef.id,
+        inviaPush: true
+      });
 
       await caricaPost();
 
@@ -1313,12 +1346,28 @@ const approvaPost = async (post) => {
       datiDaPubblicare
     );
 
+    await notificaAmministratori({
+      type: "new-post",
+      title: "📝 Nuovo spotted pubblicato",
+      body: (datiDaPubblicare.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
+      postId: originalId,
+      inviaPush: true
+    });
+
   } else {
 
-    await addDoc(
+    const postRef = await addDoc(
       collection(db, "posts"),
       datiDaPubblicare
     );
+
+    await notificaAmministratori({
+      type: "new-post",
+      title: "📝 Nuovo spotted pubblicato",
+      body: (datiDaPubblicare.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
+      postId: postRef.id,
+      inviaPush: true
+    });
 
   }
 
@@ -1886,6 +1935,7 @@ await setDoc(
     notifyPending,
     notifyReports,
     notifyNewUsers,
+    notifyNewPosts,
     notifyAllComments,
     notifyAllLikes,
     adminNotificationsConfigured: true
@@ -2273,6 +2323,8 @@ return (
       setNotifyReports={setNotifyReports}
       notifyNewUsers={notifyNewUsers}
       setNotifyNewUsers={setNotifyNewUsers}
+      notifyNewPosts={notifyNewPosts}
+      setNotifyNewPosts={setNotifyNewPosts}
       salvaNewsletter={salvaNewsletter}
       isAdmin={isAdmin}
       notifications={notifications}
@@ -2744,6 +2796,7 @@ return (
         likes={likes}
         user={null}
         isAdmin={false}
+        showDownloadImage
       />
     ))}
 

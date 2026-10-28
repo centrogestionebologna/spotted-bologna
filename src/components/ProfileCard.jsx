@@ -23,6 +23,8 @@ function ProfileCard({
   setNotifyReports,
   notifyNewUsers,
   setNotifyNewUsers,
+  notifyNewPosts,
+  setNotifyNewPosts,
   notifyAllComments,
   setNotifyAllComments,
   notifyAllLikes,
@@ -211,6 +213,14 @@ const gestisciAttivazionePush = async () => {
                     type="checkbox"
                     checked={notifyNewUsers}
                     onChange={() => setNotifyNewUsers(!notifyNewUsers)}
+                  />
+                </div>
+                <div className="notification-row">
+                  <span>Nuovi post pubblicati</span>
+                  <input
+                    type="checkbox"
+                    checked={notifyNewPosts}
+                    onChange={() => setNotifyNewPosts(!notifyNewPosts)}
                   />
                 </div>
                 <div className="notification-row">
