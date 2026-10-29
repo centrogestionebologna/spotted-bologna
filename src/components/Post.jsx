@@ -25,11 +25,49 @@ const disegnaTestoACapo = (context, testo, x, y, maxWidth, lineHeight) => {
 
 const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
   const width = 900;
-  const height = 2000;
+  let height = 1600;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const context = canvas.getContext("2d");
+  let context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas non disponibile");
+
+  const cardX = 92;
+  const cardY = 408;
+  const cardWidth = 716;
+  const padding = 49;
+  const textX = cardX + padding;
+  const textY = cardY + padding;
+  const maxTextWidth = cardWidth - padding * 2;
+  const testoRighe = String(post.text || "").split("\n");
+  const fontSize = 58;
+  const lineHeight = Math.round(fontSize * 1.24);
+  context.font = `${fontSize}px Arial, sans-serif`;
+  const lineCount = Math.max(
+    1,
+    testoRighe.reduce((totale, paragrafo) => {
+      let riga = "";
+      let numeroRighe = 0;
+      paragrafo.split(/\s+/).forEach((parola) => {
+        const candidata = riga ? `${riga} ${parola}` : parola;
+        if (riga && context.measureText(candidata).width > maxTextWidth) {
+          numeroRighe += 1;
+          riga = parola;
+        } else {
+          riga = candidata;
+        }
+      });
+      return totale + numeroRighe + 1;
+    }, 0)
+  );
+  const cardHeight = Math.max(
+    380,
+    padding + fontSize + Math.max(0, lineCount - 1) * lineHeight + 72 + 78 + 60
+  );
+
+  height = Math.max(1600, cardY + cardHeight + 250);
+  canvas.height = height;
+  context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas non disponibile");
 
   const sfondo = context.createLinearGradient(0, 0, width, height);
@@ -52,55 +90,29 @@ const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
   context.fillText("OFFICIAL", width / 2, 219);
   context.letterSpacing = "0px";
 
-  context.textAlign = "left";
+  context.textAlign = "center";
   context.fillStyle = "rgba(255,255,255,0.075)";
-  context.font = "900 190px Arial, sans-serif";
-  context.fillText("SPOTTED", 42, 458);
-  context.fillText("BOLOGNA", 42, 660);
-  context.font = "900 105px Arial, sans-serif";
-  context.fillText("OFFICIAL", 56, 780);
-
-  const cardX = 92;
-  const cardY = 408;
-  const cardWidth = 716;
-  const padding = 49;
-  const textX = cardX + padding;
-  const maxTextWidth = cardWidth - padding * 2;
-  let fontSize = 57;
-  let lineHeight = 70;
-  let lineCount = 0;
-  let cardHeight = 0;
-
-  do {
-    context.font = `${fontSize}px Arial, sans-serif`;
-    const righe = String(post.text || "").split("\n").reduce((totale, paragrafo) => {
-      let riga = "";
-      let numeroRighe = 0;
-      paragrafo.split(/\s+/).forEach((parola) => {
-        const candidata = riga ? `${riga} ${parola}` : parola;
-        if (riga && context.measureText(candidata).width > maxTextWidth) {
-          numeroRighe += 1;
-          riga = parola;
-        } else {
-          riga = candidata;
-        }
-      });
-      return totale + numeroRighe + 1;
-    }, 0);
-    lineCount = Math.max(righe, 1);
-    lineHeight = Math.round(fontSize * 1.25);
-    cardHeight = Math.max(
-      1320,
-      padding * 2 + lineCount * lineHeight + 205
-    );
-    if (cardHeight <= 1100 || fontSize <= 22) break;
-    fontSize -= 3;
-  } while (fontSize >= 22);
+  [
+    { testo: "SPOTTED", y: 438, dimensione: 190 },
+    { testo: "BOLOGNA", y: 620, dimensione: 175 },
+    { testo: "OFFICIAL", y: 742, dimensione: 82 }
+  ].forEach(({ testo, y, dimensione }) => {
+    let dimensioneAdattata = dimensione;
+    context.font = `900 ${dimensioneAdattata}px Arial, sans-serif`;
+    while (
+      context.measureText(testo).width > width - 72 &&
+      dimensioneAdattata > 30
+    ) {
+      dimensioneAdattata -= 2;
+      context.font = `900 ${dimensioneAdattata}px Arial, sans-serif`;
+    }
+    context.fillText(testo, width / 2, y);
+  });
 
   const cardBottom = cardY + cardHeight;
   const cardGradient = context.createLinearGradient(cardX, cardY, cardX + cardWidth, cardBottom);
-  cardGradient.addColorStop(0, "rgba(18,16,19,0.96)");
-  cardGradient.addColorStop(1, "rgba(43,32,47,0.96)");
+  cardGradient.addColorStop(0, "rgba(18,16,19,0.90)");
+  cardGradient.addColorStop(1, "rgba(43,32,47,0.90)");
   context.fillStyle = cardGradient;
   context.strokeStyle = "rgba(190,174,202,0.62)";
   context.lineWidth = 2;
@@ -112,16 +124,13 @@ const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
   context.textAlign = "left";
   context.fillStyle = "#f7f6f8";
   context.font = `${fontSize}px Arial, sans-serif`;
-  const textTop = cardY + padding + fontSize;
+  const textTop = textY + fontSize;
   disegnaTestoACapo(context, post.text, textX, textTop, maxTextWidth, lineHeight);
 
   const data = post.createdAt
     ? new Date(post.createdAt).toLocaleDateString("it-IT")
     : "";
-  const metaY = Math.max(
-    textTop + lineCount * lineHeight + 90,
-    cardY + cardHeight - 180
-  );
+  const metaY = textTop + Math.max(0, lineCount - 1) * lineHeight + 72;
   context.fillStyle = "#aaa7ad";
   context.font = "40px Arial, sans-serif";
   context.fillText(data, textX, metaY);
