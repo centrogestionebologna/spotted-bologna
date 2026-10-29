@@ -60,9 +60,13 @@ const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
       return totale + numeroRighe + 1;
     }, 0)
   );
+  const isGroupProposal = post.type === "groupProposal";
+  const requiredLikes = Math.max(1, Number(post.requiredLikes) || 10);
+  const obiettivoRaggiunto = Boolean(post.unlockedAt) || likesCount >= requiredLikes;
+  const groupContentHeight = isGroupProposal ? 190 : 0;
   const cardHeight = Math.max(
     380,
-    padding + fontSize + Math.max(0, lineCount - 1) * lineHeight + 72 + 78 + 60
+    padding + fontSize + Math.max(0, lineCount - 1) * lineHeight + 72 + 78 + groupContentHeight + 60
   );
 
   height = Math.max(1600, cardY + cardHeight + 250);
@@ -122,9 +126,15 @@ const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
   context.stroke();
 
   context.textAlign = "left";
+  const textTop = textY + fontSize + (isGroupProposal ? 62 : 0);
+  if (isGroupProposal) {
+    context.fillStyle = "#f5c542";
+    context.font = "bold 32px Arial, sans-serif";
+    context.fillText("📚 PROPOSTA GRUPPO", textX, textY + 35);
+  }
+
   context.fillStyle = "#f7f6f8";
   context.font = `${fontSize}px Arial, sans-serif`;
-  const textTop = textY + fontSize;
   disegnaTestoACapo(context, post.text, textX, textTop, maxTextWidth, lineHeight);
 
   const data = post.createdAt
@@ -134,7 +144,22 @@ const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
   context.fillStyle = "#aaa7ad";
   context.font = "40px Arial, sans-serif";
   context.fillText(data, textX, metaY);
-  context.fillText(`${likesCount} like - ${commentsCount} commenti`, textX, metaY + 78);
+  if (isGroupProposal) {
+    context.fillStyle = "#f5c542";
+    context.font = "bold 36px Arial, sans-serif";
+    context.fillText(`PROGRESSO GRUPPO: ${likesCount} / ${requiredLikes} like`, textX, metaY + 78);
+    context.fillStyle = "#d4d0d8";
+    context.font = "28px Arial, sans-serif";
+    context.fillText(
+      obiettivoRaggiunto
+        ? "Obiettivo raggiunto: il link è disponibile."
+        : "Il link si sblocca al raggiungimento dell’obiettivo.",
+      textX,
+      metaY + 132
+    );
+  } else {
+    context.fillText(`${likesCount} like - ${commentsCount} commenti`, textX, metaY + 78);
+  }
 
   context.textAlign = "right";
   context.fillStyle = "rgba(220,215,225,0.72)";
