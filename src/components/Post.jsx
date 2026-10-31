@@ -23,7 +23,31 @@ const disegnaTestoACapo = (context, testo, x, y, maxWidth, lineHeight) => {
   return righe.length;
 };
 
-const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
+const INVITO_ACCESSO =
+  "Accedi per visualizzare commenti e like! Link in descrizione al profilo Instagram";
+
+const contaRigheTesto = (context, testo, maxWidth) =>
+  Math.max(
+    1,
+    String(testo || "")
+      .split("\n")
+      .reduce((totale, paragrafo) => {
+        let riga = "";
+        let numeroRighe = 0;
+        paragrafo.split(/\s+/).forEach((parola) => {
+          const candidata = riga ? `${riga} ${parola}` : parola;
+          if (riga && context.measureText(candidata).width > maxWidth) {
+            numeroRighe += 1;
+            riga = parola;
+          } else {
+            riga = candidata;
+          }
+        });
+        return totale + numeroRighe + 1;
+      }, 0)
+  );
+
+const scaricaImmaginePost = async (post, likesCount) => {
   const width = 900;
   let height = 1600;
   const canvas = document.createElement("canvas");
@@ -39,34 +63,37 @@ const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
   const textX = cardX + padding;
   const textY = cardY + padding;
   const maxTextWidth = cardWidth - padding * 2;
-  const testoRighe = String(post.text || "").split("\n");
   const fontSize = 58;
   const lineHeight = Math.round(fontSize * 1.24);
   context.font = `${fontSize}px Arial, sans-serif`;
-  const lineCount = Math.max(
-    1,
-    testoRighe.reduce((totale, paragrafo) => {
-      let riga = "";
-      let numeroRighe = 0;
-      paragrafo.split(/\s+/).forEach((parola) => {
-        const candidata = riga ? `${riga} ${parola}` : parola;
-        if (riga && context.measureText(candidata).width > maxTextWidth) {
-          numeroRighe += 1;
-          riga = parola;
-        } else {
-          riga = candidata;
-        }
-      });
-      return totale + numeroRighe + 1;
-    }, 0)
-  );
+  const lineCount = contaRigheTesto(context, post.text, maxTextWidth);
   const isGroupProposal = post.type === "groupProposal";
   const requiredLikes = Math.max(1, Number(post.requiredLikes) || 10);
   const obiettivoRaggiunto = Boolean(post.unlockedAt) || likesCount >= requiredLikes;
-  const groupContentHeight = isGroupProposal ? 190 : 0;
+  const statoGruppo = obiettivoRaggiunto
+    ? "Obiettivo raggiunto: il link è disponibile."
+    : "Il link si sblocca al raggiungimento dell’obiettivo.";
+
+  context.font = "bold 30px Arial, sans-serif";
+  const invitoRighe = contaRigheTesto(context, INVITO_ACCESSO, maxTextWidth);
+  context.font = "28px Arial, sans-serif";
+  const statoGruppoRighe = isGroupProposal
+    ? contaRigheTesto(context, statoGruppo, maxTextWidth)
+    : 0;
+  const statoLineHeight = 38;
+  const gapDopoData = isGroupProposal
+    ? 58 + (statoGruppoRighe - 1) * statoLineHeight + 60
+    : 62;
   const cardHeight = Math.max(
     380,
-    padding + fontSize + Math.max(0, lineCount - 1) * lineHeight + 72 + 78 + groupContentHeight + 60
+    padding +
+      (isGroupProposal ? 62 : 0) +
+      fontSize +
+      Math.max(0, lineCount - 1) * lineHeight +
+      72 +
+      gapDopoData +
+      (invitoRighe - 1) * 42 +
+      60
   );
 
   height = Math.max(1600, cardY + cardHeight + 250);
@@ -145,21 +172,28 @@ const scaricaImmaginePost = async (post, likesCount, commentsCount) => {
   context.font = "40px Arial, sans-serif";
   context.fillText(data, textX, metaY);
   if (isGroupProposal) {
-    context.fillStyle = "#f5c542";
-    context.font = "bold 36px Arial, sans-serif";
-    context.fillText(`PROGRESSO GRUPPO: ${likesCount} / ${requiredLikes} like`, textX, metaY + 78);
     context.fillStyle = "#d4d0d8";
     context.font = "28px Arial, sans-serif";
-    context.fillText(
-      obiettivoRaggiunto
-        ? "Obiettivo raggiunto: il link è disponibile."
-        : "Il link si sblocca al raggiungimento dell’obiettivo.",
+    disegnaTestoACapo(
+      context,
+      statoGruppo,
       textX,
-      metaY + 132
+      metaY + 58,
+      maxTextWidth,
+      statoLineHeight
     );
-  } else {
-    context.fillText(`${likesCount} like - ${commentsCount} commenti`, textX, metaY + 78);
   }
+
+  context.fillStyle = "#f5c542";
+  context.font = "bold 30px Arial, sans-serif";
+  disegnaTestoACapo(
+    context,
+    INVITO_ACCESSO,
+    textX,
+    metaY + gapDopoData,
+    maxTextWidth,
+    42
+  );
 
   context.textAlign = "right";
   context.fillStyle = "rgba(220,215,225,0.72)";
@@ -266,7 +300,7 @@ const seguePost =
 
   const scaricaImmagine = async () => {
     try {
-      await scaricaImmaginePost(post, likesCount, commentsCount);
+      await scaricaImmaginePost(post, likesCount);
     } catch (error) {
       console.error("Errore durante la creazione dell'immagine dello spotted:", error);
       alert("Non è stato possibile creare l'immagine dello spotted.");
