@@ -632,17 +632,52 @@ async function inviaPushAUtente({
 }
 
 /*
+ * Controlla se l'origine rientra nell'elenco ALLOWED_ORIGIN
+ * (una o piu' origini separate da virgola).
+ */
+function origineInElenco(origin, env) {
+  const elenco = String(
+    env.ALLOWED_ORIGIN || ""
+  )
+    .split(",")
+    .map((voce) =>
+      voce.trim().replace(/\/$/, "")
+    )
+    .filter(Boolean);
+
+  if (elenco.length === 0) {
+    return true;
+  }
+
+  const originePulita = String(
+    origin || ""
+  ).replace(/\/$/, "");
+
+  return elenco.includes(originePulita);
+}
+
+/*
  * Header CORS.
+ *
+ * Il Worker risponde sempre all'origine che ha effettuato la richiesta:
+ * gli endpoint sono protetti dal Firebase ID token nell'header
+ * Authorization e non da cookie di sessione, quindi un sito terzo non
+ * puo' impersonare l'utente. Vincolare l'origine bloccherebbe soltanto
+ * il sito vero quando cambia indirizzo (dominio nuovo, Pages, IP di
+ * prova da telefono) facendo fallire in silenzio notifiche e conteggio
+ * iscritti: ALLOWED_ORIGIN resta come elenco di riferimento e finisce
+ * nei log quando arriva un'origine diversa.
  */
 function creaHeadersCors(origin, env) {
-  const origineConsentita =
-    origin === env.ALLOWED_ORIGIN
+  const origineRisposta =
+    typeof origin === "string" &&
+    /^https?:\/\/[^\s]+$/.test(origin)
       ? origin
       : env.ALLOWED_ORIGIN;
 
   return {
     "Access-Control-Allow-Origin":
-      origineConsentita,
+      origineRisposta,
     "Access-Control-Allow-Methods":
       "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
@@ -1217,16 +1252,10 @@ export default {
         "/send-to-user"
     ) {
       try {
-        if (origin !== env.ALLOWED_ORIGIN) {
-          return rispostaJson(
-            {
-              success: false,
-              error:
-                "Origine non autorizzata."
-            },
-            403,
-            origin,
-            env
+        if (origin && !origineInElenco(origin, env)) {
+          console.warn(
+            "Origine fuori da ALLOWED_ORIGIN:",
+            origin
           );
         }
 
@@ -1398,16 +1427,10 @@ if (
     "/notify-pending"
 ) {
   try {
-    if (origin !== env.ALLOWED_ORIGIN) {
-      return rispostaJson(
-        {
-          success: false,
-          error:
-            "Origine non autorizzata."
-        },
-        403,
-        origin,
-        env
+    if (origin && !origineInElenco(origin, env)) {
+      console.warn(
+        "Origine fuori da ALLOWED_ORIGIN:",
+        origin
       );
     }
 
@@ -1671,18 +1694,10 @@ if (
     "/notify-report"
 ) {
   try {
-    if (
-      origin !== env.ALLOWED_ORIGIN
-    ) {
-      return rispostaJson(
-        {
-          success: false,
-          error:
-            "Origine non autorizzata."
-        },
-        403,
-        origin,
-        env
+    if (origin && !origineInElenco(origin, env)) {
+      console.warn(
+        "Origine fuori da ALLOWED_ORIGIN:",
+        origin
       );
     }
 
@@ -1936,16 +1951,10 @@ if (
     "/notify-new-user"
 ) {
   try {
-    if (origin !== env.ALLOWED_ORIGIN) {
-      return rispostaJson(
-        {
-          success: false,
-          error:
-            "Origine non autorizzata."
-        },
-        403,
-        origin,
-        env
+    if (origin && !origineInElenco(origin, env)) {
+      console.warn(
+        "Origine fuori da ALLOWED_ORIGIN:",
+        origin
       );
     }
 
@@ -2217,16 +2226,10 @@ if (
         "/community-count"
     ) {
       try {
-        if (origin !== env.ALLOWED_ORIGIN) {
-          return rispostaJson(
-            {
-              success: false,
-              error:
-                "Origine non autorizzata."
-            },
-            403,
-            origin,
-            env
+        if (origin && !origineInElenco(origin, env)) {
+          console.warn(
+            "Origine fuori da ALLOWED_ORIGIN:",
+            origin
           );
         }
 
