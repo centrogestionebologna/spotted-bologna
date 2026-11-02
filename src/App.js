@@ -26,7 +26,8 @@ import {
   where,
   onSnapshot,
   runTransaction,
-  increment
+  increment,
+  getCountFromServer
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
@@ -329,6 +330,7 @@ const [
 const conteggioUtentiSincronizzatoRef = useRef(null);
 const sincronizzazioneConteggioUtentiRef = useRef(Promise.resolve());
 const pendingNotificheInCorsoRef = useRef(new Set());
+const [avvioConcluso, setAvvioConcluso] = useState(false);
 
   const [newsletter, setNewsletter] =
   useState("mai");
@@ -415,8 +417,51 @@ const [
   setPropostaTargetLike
 ] = useState(10);
 
-// Crea il profilo e aggiorna il contatore comunità in modo atomico.
-// Viene usata sia da loginGoogle sia da onAuthStateChanged.
+// Il conteggio pubblico vive in publicStats/community: viene aggiornato
+// separatamente dalla creazione del profilo, cosi' un permesso mancante su
+// quel documento non blocca mai la registrazione dell'utente.
+const aggiornaConteggioIscritti = async (delta) => {
+  try {
+    await setDoc(
+      doc(db, "publicStats", "community"),
+      {
+        numeroIscritti: increment(delta),
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (erroreConteggio) {
+    console.warn(
+      "Conteggio iscritti non aggiornato: controlla i permessi Firestore su publicStats/community.",
+      erroreConteggio
+    );
+    return false;
+  }
+};
+
+// Scrittura assoluta usata quando conosciamo il totale esatto: evita che
+// aggiornamenti contemporanei di piu' client si sommino tra loro.
+const allineaConteggioPubblicato = async (totale) => {
+  try {
+    await setDoc(
+      doc(db, "publicStats", "community"),
+      {
+        numeroIscritti: totale,
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (erroreConteggio) {
+    console.warn(
+      "Conteggio iscritti pubblico non allineato: controlla i permessi Firestore su publicStats/community.",
+      erroreConteggio
+    );
+    return false;
+  }
+};
+
 const assicuraProfiloUtente = async (currentUser) => {
   const userRef = doc(db, "users", currentUser.uid);
   const creato = await runTransaction(db, async (transaction) => {
@@ -426,7 +471,6 @@ const assicuraProfiloUtente = async (currentUser) => {
       return false;
     }
 
-    const statsRef = doc(db, "publicStats", "community");
     transaction.set(userRef, {
       uid: currentUser.uid,
       name: currentUser.displayName || "",
@@ -451,16 +495,12 @@ const assicuraProfiloUtente = async (currentUser) => {
 
       createdAt: new Date().toISOString()
     });
-    transaction.set(
-      statsRef,
-      { numeroIscritti: increment(1) },
-      { merge: true }
-    );
-
     return true;
   });
 
   if (creato) {
+    await aggiornaConteggioIscritti(1);
+
     try {
       await notificaAmministratori({
         type: "new-user",
@@ -490,6 +530,8 @@ useEffect(() => {
   onAuthStateChanged(
     auth,
     async (currentUser) => {
+
+      try {
 
       if (!currentUser) return;
 
@@ -602,8 +644,24 @@ if (datiUtente.newsletter) {
 
 }
 
+      } catch (erroreAvvio) {
+        console.error(
+          "Errore durante il caricamento del profilo:",
+          erroreAvvio
+        );
+      } finally {
+        setAvvioConcluso(true);
+      }
     }
   );
+
+  // Rete lenta o Firestore bloccato: non lasciare l'app sulla schermata
+  // di avvio all'infinito.
+  const timeoutAvvio = setTimeout(() => {
+    setAvvioConcluso(true);
+  }, 12000);
+
+  return () => clearTimeout(timeoutAvvio);
 
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
@@ -680,7 +738,10 @@ useEffect(() => {
           .then(() =>
             setDoc(
               doc(db, "publicStats", "community"),
-              { numeroIscritti: conteggioReale },
+              {
+                numeroIscritti: conteggioReale,
+                updatedAt: new Date().toISOString()
+              },
               { merge: true }
             )
           )
@@ -2026,22 +2087,19 @@ const eliminaUtente = async (uid) => {
 
   if (!conferma) return;
 
-  await runTransaction(db, async (transaction) => {
+  const eliminato = await runTransaction(db, async (transaction) => {
     const userRef = doc(db, "users", uid);
-    const statsRef = doc(db, "publicStats", "community");
     const userSnap = await transaction.get(userRef);
 
-    if (!userSnap.exists()) return;
-
-    await transaction.get(statsRef);
+    if (!userSnap.exists()) return false;
 
     transaction.delete(userRef);
-    transaction.set(
-      statsRef,
-      { numeroIscritti: increment(-1) },
-      { merge: true }
-    );
+    return true;
   });
+
+  if (eliminato) {
+    await aggiornaConteggioIscritti(-1);
+  }
 
   await salvaLog(
     "Elimina utente",
@@ -2246,6 +2304,10 @@ async () => {
   }
 };
 
+// Conteggio iscritti per chi non e' admin: il documento pubblico resta la
+// sorgente in tempo reale, mentre un conteggio aggregato della collezione
+// users tiene il numero esatto e riallinea il documento se i permessi lo
+// consentono. Ogni errore (permessi, rete) lascia attivo il listener.
 useEffect(() => {
   if (!user || isAdmin) return undefined;
 
@@ -2255,16 +2317,22 @@ useEffect(() => {
     "community"
   );
 
+  let attivo = true;
+  let conteggioPubblicato = null;
+  let avvisoMostrato = false;
+
   const unsubscribe = onSnapshot(
     statsRef,
     { includeMetadataChanges: true },
     (snapshot) => {
       if (snapshot.metadata.fromCache) return;
-      setNumeroIscritti(
-        snapshot.exists()
-          ? Number(snapshot.data().numeroIscritti) || 0
-          : 0
-      );
+
+      const valore = snapshot.exists()
+        ? Number(snapshot.data().numeroIscritti) || 0
+        : 0;
+
+      conteggioPubblicato = valore;
+      setNumeroIscritti(valore);
     },
     (error) => {
       console.error(
@@ -2274,18 +2342,71 @@ useEffect(() => {
     }
   );
 
-  return () => unsubscribe();
+  const allineaConteggioEsatto = async () => {
+    try {
+      const risultato = await getCountFromServer(
+        collection(db, "users")
+      );
+
+      if (!attivo) return;
+
+      const totale = risultato.data().count;
+      setNumeroIscritti(totale);
+
+      if (
+        conteggioPubblicato !== null &&
+        totale !== conteggioPubblicato
+      ) {
+        await allineaConteggioPubblicato(totale);
+      }
+    } catch (error) {
+      if (!avvisoMostrato) {
+        avvisoMostrato = true;
+        console.warn(
+          "Conteggio iscritti esatto non disponibile, uso il conteggio pubblico:",
+          error
+        );
+      }
+    }
+  };
+
+  allineaConteggioEsatto();
+
+  const intervallo = window.setInterval(
+    allineaConteggioEsatto,
+    60000
+  );
+
+  const suFocus = () => {
+    allineaConteggioEsatto();
+  };
+
+  window.addEventListener("focus", suFocus);
+
+  return () => {
+    attivo = false;
+    window.clearInterval(intervallo);
+    window.removeEventListener("focus", suFocus);
+    unsubscribe();
+  };
 }, [user, isAdmin]);
 
-
-
-
-
-
-
-
-
-
+if (!avvioConcluso) {
+  return (
+    <div className="splash-screen">
+      <div className="splash-logo">
+        <span className="splash-heart">♥</span>
+        <span className="splash-word">SPOTTED</span>
+        <span className="splash-word">BOLOGNA</span>
+        <span className="splash-official">OFFICIAL</span>
+      </div>
+      <div className="splash-bar">
+        <span />
+      </div>
+      <p className="splash-caption">Caricamento del tuo profilo…</p>
+    </div>
+  );
+}
 
 return (
   <div className="app-container">
