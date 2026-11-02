@@ -58,6 +58,15 @@ const eseguiRichiestaWorker = async (
   return risultato;
 };
 
+export const aggiornaConteggioIscrittiServer = async (
+  forza = false
+) => {
+  return eseguiRichiestaWorker(
+    "/community-count",
+    { force: forza }
+  );
+};
+
 export const notificaNuovoPending = async (
   pendingPostId
 ) => {

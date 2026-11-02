@@ -25,14 +25,15 @@ import {
   query,
   where,
   onSnapshot,
-  runTransaction,
-  increment,
-  getCountFromServer
+  runTransaction
 } from "firebase/firestore";
 
 import { auth, provider, db } from "./firebase";
 
-import { inviaPushAUtente } from "./services/pushSender";
+import {
+  inviaPushAUtente,
+  aggiornaConteggioIscrittiServer
+} from "./services/pushSender";
 
 // Ridimensiona e comprime l'immagine, restituisce una stringa base64
 const comprimiImmagine = (
@@ -93,6 +94,48 @@ const comprimiImmagine = (
 
     reader.readAsDataURL(file);
   });
+
+// Il documento publicStats/community e' scrivibile solo dal Worker con il
+// service account (le regole Firestore bloccano i client e la collezione users
+// non e' leggibile dagli utenti normali, quindi nemmeno un conteggio dal
+// browser e' possibile). Il conteggio esatto lo calcola il Worker, che poi
+// aggiorna il documento letto in tempo reale da tutti.
+let ultimaRichiestaConteggio = 0;
+const INTERVALLO_RICHIESTA_CONTEAGGIO = 5 * 60 * 1000;
+
+const richiediConteggioIscrittiAggiornato = async (
+  forza = false
+) => {
+  const adesso = Date.now();
+
+  if (
+    !forza &&
+    adesso - ultimaRichiestaConteggio <
+      INTERVALLO_RICHIESTA_CONTEAGGIO
+  ) {
+    return null;
+  }
+
+  ultimaRichiestaConteggio = adesso;
+
+  try {
+    const risultato =
+      await aggiornaConteggioIscrittiServer(forza);
+
+    const totale = Number(risultato?.numeroIscritti);
+
+    return Number.isFinite(totale) ? totale : null;
+  } catch (erroreConteggio) {
+    ultimaRichiestaConteggio = 0;
+
+    console.warn(
+      "Conteggio iscritti non aggiornato dal Worker:",
+      erroreConteggio
+    );
+
+    return null;
+  }
+};
 
 function App() {
   const creaNotifica = async ({
@@ -330,6 +373,7 @@ const [
 const conteggioUtentiSincronizzatoRef = useRef(null);
 const sincronizzazioneConteggioUtentiRef = useRef(Promise.resolve());
 const pendingNotificheInCorsoRef = useRef(new Set());
+const uidUtenteCaricatoRef = useRef(null);
 const [avvioConcluso, setAvvioConcluso] = useState(false);
 
   const [newsletter, setNewsletter] =
@@ -417,51 +461,6 @@ const [
   setPropostaTargetLike
 ] = useState(10);
 
-// Il conteggio pubblico vive in publicStats/community: viene aggiornato
-// separatamente dalla creazione del profilo, cosi' un permesso mancante su
-// quel documento non blocca mai la registrazione dell'utente.
-const aggiornaConteggioIscritti = async (delta) => {
-  try {
-    await setDoc(
-      doc(db, "publicStats", "community"),
-      {
-        numeroIscritti: increment(delta),
-        updatedAt: new Date().toISOString()
-      },
-      { merge: true }
-    );
-    return true;
-  } catch (erroreConteggio) {
-    console.warn(
-      "Conteggio iscritti non aggiornato: controlla i permessi Firestore su publicStats/community.",
-      erroreConteggio
-    );
-    return false;
-  }
-};
-
-// Scrittura assoluta usata quando conosciamo il totale esatto: evita che
-// aggiornamenti contemporanei di piu' client si sommino tra loro.
-const allineaConteggioPubblicato = async (totale) => {
-  try {
-    await setDoc(
-      doc(db, "publicStats", "community"),
-      {
-        numeroIscritti: totale,
-        updatedAt: new Date().toISOString()
-      },
-      { merge: true }
-    );
-    return true;
-  } catch (erroreConteggio) {
-    console.warn(
-      "Conteggio iscritti pubblico non allineato: controlla i permessi Firestore su publicStats/community.",
-      erroreConteggio
-    );
-    return false;
-  }
-};
-
 const assicuraProfiloUtente = async (currentUser) => {
   const userRef = doc(db, "users", currentUser.uid);
   const creato = await runTransaction(db, async (transaction) => {
@@ -499,7 +498,7 @@ const assicuraProfiloUtente = async (currentUser) => {
   });
 
   if (creato) {
-    await aggiornaConteggioIscritti(1);
+    await richiediConteggioIscrittiAggiornato(true);
 
     try {
       await notificaAmministratori({
@@ -531,9 +530,33 @@ useEffect(() => {
     auth,
     async (currentUser) => {
 
-      try {
+      if (!currentUser) {
+        uidUtenteCaricatoRef.current = null;
+        setAvvioConcluso(true);
+        return;
+      }
 
-      if (!currentUser) return;
+      // Cambio account (o primo accesso): mostra la schermata di
+      // caricamento invece di far vedere il passaggio da "Accedi con
+      // Google" a "Scegli nickname" fino al profilo vero e proprio.
+      const utenteCambiato =
+        uidUtenteCaricatoRef.current !== currentUser.uid;
+
+      uidUtenteCaricatoRef.current = currentUser.uid;
+
+      if (utenteCambiato) {
+        setAvvioConcluso(false);
+        setSavedNickname("");
+        setIsAdmin(false);
+      }
+
+      const timeoutProfilo = utenteCambiato
+        ? setTimeout(() => {
+            setAvvioConcluso(true);
+          }, 12000)
+        : null;
+
+      try {
 
       setUser(currentUser);
       await caricaFollowers();
@@ -650,6 +673,10 @@ if (datiUtente.newsletter) {
           erroreAvvio
         );
       } finally {
+        if (timeoutProfilo) {
+          clearTimeout(timeoutProfilo);
+        }
+
         setAvvioConcluso(true);
       }
     }
@@ -736,14 +763,7 @@ useEffect(() => {
         sincronizzazioneConteggioUtentiRef.current
           .catch(() => {})
           .then(() =>
-            setDoc(
-              doc(db, "publicStats", "community"),
-              {
-                numeroIscritti: conteggioReale,
-                updatedAt: new Date().toISOString()
-              },
-              { merge: true }
-            )
+            richiediConteggioIscrittiAggiornato(true)
           )
           .catch((error) => {
             if (conteggioUtentiSincronizzatoRef.current === conteggioReale) {
@@ -2098,7 +2118,7 @@ const eliminaUtente = async (uid) => {
   });
 
   if (eliminato) {
-    await aggiornaConteggioIscritti(-1);
+    await richiediConteggioIscrittiAggiornato(true);
   }
 
   await salvaLog(
@@ -2305,9 +2325,9 @@ async () => {
 };
 
 // Conteggio iscritti per chi non e' admin: il documento pubblico resta la
-// sorgente in tempo reale, mentre un conteggio aggregato della collezione
-// users tiene il numero esatto e riallinea il documento se i permessi lo
-// consentono. Ogni errore (permessi, rete) lascia attivo il listener.
+// sorgente in tempo reale, mentre il Worker (che ha il service account) viene
+// invitato a ricalcolare il numero esatto e a riscriverlo. Ogni errore di rete
+// lascia comunque attivo il listener.
 useEffect(() => {
   if (!user || isAdmin) return undefined;
 
@@ -2318,8 +2338,6 @@ useEffect(() => {
   );
 
   let attivo = true;
-  let conteggioPubblicato = null;
-  let avvisoMostrato = false;
 
   const unsubscribe = onSnapshot(
     statsRef,
@@ -2331,7 +2349,6 @@ useEffect(() => {
         ? Number(snapshot.data().numeroIscritti) || 0
         : 0;
 
-      conteggioPubblicato = valore;
       setNumeroIscritti(valore);
     },
     (error) => {
@@ -2343,38 +2360,19 @@ useEffect(() => {
   );
 
   const allineaConteggioEsatto = async () => {
-    try {
-      const risultato = await getCountFromServer(
-        collection(db, "users")
-      );
+    const totale =
+      await richiediConteggioIscrittiAggiornato();
 
-      if (!attivo) return;
+    if (!attivo || totale === null) return;
 
-      const totale = risultato.data().count;
-      setNumeroIscritti(totale);
-
-      if (
-        conteggioPubblicato !== null &&
-        totale !== conteggioPubblicato
-      ) {
-        await allineaConteggioPubblicato(totale);
-      }
-    } catch (error) {
-      if (!avvisoMostrato) {
-        avvisoMostrato = true;
-        console.warn(
-          "Conteggio iscritti esatto non disponibile, uso il conteggio pubblico:",
-          error
-        );
-      }
-    }
+    setNumeroIscritti(totale);
   };
 
   allineaConteggioEsatto();
 
   const intervallo = window.setInterval(
     allineaConteggioEsatto,
-    60000
+    10 * 60 * 1000
   );
 
   const suFocus = () => {
