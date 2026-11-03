@@ -35,6 +35,12 @@ import {
   aggiornaConteggioIscrittiServer
 } from "./services/pushSender";
 
+import {
+  ascoltaNotificheInPrimoPiano,
+  mostraNotificaInPrimoPiano,
+  sincronizzaTokenPush
+} from "./services/pushNotifications";
+
 // Ridimensiona e comprime l'immagine, restituisce una stringa base64
 const comprimiImmagine = (
   file,
@@ -2388,6 +2394,46 @@ useEffect(() => {
     unsubscribe();
   };
 }, [user, isAdmin]);
+
+/*
+ * Rinnova il token push a ogni avvio. FCM puo' ruotarlo o invalidarlo
+ * (aggiornamento del browser, dati del sito ripuliti): senza questo
+ * riallineamento il dispositivo smette di ricevere notifiche, come
+ * succedeva al telefono, senza mostrare nessun errore.
+ */
+useEffect(() => {
+  if (!user) return;
+
+  sincronizzaTokenPush();
+}, [user]);
+
+/*
+ * Con l'app aperta il browser non visualizza la notifica da solo
+ * (su Android non compare proprio nulla): la mostriamo qui, con lo
+ * stesso tag dell'evento, cosi' non si sovrappone a quella in background.
+ */
+useEffect(() => {
+  if (!user) return undefined;
+
+  let attivo = true;
+  let annulla = () => {};
+
+  ascoltaNotificheInPrimoPiano((payload) => {
+    if (!attivo) return;
+
+    mostraNotificaInPrimoPiano(payload);
+  }).then((unsubscribe) => {
+    if (typeof unsubscribe === "function") {
+      annulla = unsubscribe;
+    }
+  });
+
+  return () => {
+    attivo = false;
+
+    annulla();
+  };
+}, [user]);
 
 if (!avvioConcluso) {
   return (

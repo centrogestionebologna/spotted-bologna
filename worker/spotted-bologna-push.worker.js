@@ -401,9 +401,15 @@ function tokenFCMNonValido(risultato) {
   const codice =
     dettaglioFCM?.errorCode || "";
 
+  /*
+   * Solo questi due errori indicano davvero un token inutilizzabile.
+   * INVALID_ARGUMENT invece segnala spesso un problema del messaggio:
+   * eliminare il token in quel caso faceva sparire in silenzio i
+   * dispositivi (telefono compreso) e non ricevevano piu' nulla.
+   */
   return (
     codice === "UNREGISTERED" ||
-    codice === "INVALID_ARGUMENT"
+    codice === "SENDER_ID_MISMATCH"
   );
 }
 
@@ -469,6 +475,54 @@ async function inviaPush({
   const urlAssoluto =
     creaUrlAssoluto(url, env);
 
+  /*
+   * FCM accetta come destinazione del clic solo URL HTTPS: se APP_URL
+   * non e' configurato finisce qui un indirizzo http (o localhost) che
+   * farebbe fallire l'intero invio con INVALID_ARGUMENT anche su
+   * telefono. Meglio ometterlo.
+   */
+  const linkSicuro =
+    typeof urlAssoluto === "string" &&
+    urlAssoluto.startsWith("https://")
+      ? urlAssoluto
+      : null;
+
+  /*
+   * Il tag fa sovrascrivere al sistema la stessa notifica invece di
+   * impilarne una copia: se un invio viene ripetuto, il destinatario
+   * la vede comunque una sola volta.
+   */
+  const notificaWeb = {
+    icon: "/logo192.png",
+    badge: "/logo192.png"
+  };
+
+  if (notificationId) {
+    notificaWeb.tag = notificationId;
+    notificaWeb.renotify = false;
+  }
+
+  const webpush = {
+    notification: notificaWeb,
+
+    /*
+     * Urgenza alta: con la priorita' normale Android puo' rimandare
+     * la consegna finche' il telefono non esce dalla modalita' doze,
+     * e la notifica sembra non arrivare mai. La TTL tiene il messaggio
+     * in coda per un giorno se il dispositivo e' spento.
+     */
+    headers: {
+      Urgency: "high",
+      TTL: "86400"
+    }
+  };
+
+  if (linkSicuro) {
+    webpush.fcm_options = {
+      link: linkSicuro
+    };
+  }
+
   const messaggio = {
     message: {
       token,
@@ -479,23 +533,14 @@ async function inviaPush({
       },
 
       data: {
-        url: urlAssoluto,
+        url: linkSicuro || "/",
         notificationId:
           notificationId || "",
         postId:
           postId || ""
       },
 
-      webpush: {
-        fcm_options: {
-          link: urlAssoluto
-        },
-
-        notification: {
-          icon: "/logo192.png",
-          badge: "/logo192.png"
-        }
-      }
+      webpush
     }
   };
 
@@ -1093,6 +1138,72 @@ async function prenotaInvioNuovoUtente({
 }
 
 /*
+ * Prenota l'invio di una notifica gia' salvata nell'app.
+ *
+ * pushDispatches e' scrivibile solo dal service account, quindi il
+ * "lucchetto" vale anche quando la notifica viene richiesta piu' volte
+ * (per esempio riaprendo o ricaricando la pagina): la seconda richiesta
+ * trova il documento e non manda nulla.
+ */
+async function prenotaInvioNotifica({
+  env,
+  accessToken,
+  notificationId
+}) {
+  const dispatchId =
+    `notif_${notificationId}`;
+
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents/pushDispatches` +
+    `?documentId=${encodeURIComponent(
+      dispatchId
+    )}`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization:
+        `Bearer ${accessToken}`,
+      "Content-Type":
+        "application/json"
+    },
+    body: JSON.stringify({
+      fields: {
+        type: {
+          stringValue: "notification"
+        },
+        sourceId: {
+          stringValue: notificationId
+        },
+        createdAt: {
+          timestampValue:
+            new Date().toISOString()
+        }
+      }
+    })
+  });
+
+  if (risposta.status === 409) {
+    return false;
+  }
+
+  if (!risposta.ok) {
+    /*
+     * Un errore di prenotazione non deve bloccare la notifica: meglio
+     * rischiare un duplicato che perdere l'avviso.
+     */
+    console.error(
+      "Errore prenotazione notifica:",
+      await risposta.text()
+    );
+  }
+
+  return true;
+}
+
+/*
  * Aggiorna publicStats/community.numeroIscritti con il numero reale di
  * documenti in "users" (aggregazione count). Essendo un conteggio e non
  * un incremento, e' idempotente e si riallinea da solo anche per gli
@@ -1370,6 +1481,57 @@ export default {
           );
         }
 
+        const notificationId =
+          typeof corpo.notificationId ===
+          "string"
+            ? corpo.notificationId.trim()
+            : "";
+
+        /*
+         * La notifica interna viene salvata prima della push: il suo ID
+         * identifica l'evento in modo stabile. Se lo stesso invio viene
+         * ripetuto (ricarica della pagina, piu' schede aperte) la
+         * prenotazione esiste gia' e il destinatario non riceve una
+         * seconda copia.
+         */
+        if (notificationId) {
+          const serviceAccount =
+            JSON.parse(
+              env.FIREBASE_SERVICE_ACCOUNT
+            );
+
+          const accessToken =
+            await ottieniAccessToken(
+              serviceAccount
+            );
+
+          const prenotato =
+            await prenotaInvioNotifica({
+              env,
+              accessToken,
+              notificationId
+            });
+
+          if (!prenotato) {
+            return rispostaJson(
+              {
+                success: true,
+                alreadySent: true,
+                recipientUserId,
+                notificationId,
+                totalDevices: 0,
+                sent: 0,
+                failed: 0,
+                removedTokens: 0,
+                results: []
+              },
+              200,
+              origin,
+              env
+            );
+          }
+        }
+
         const risultato =
           await inviaPushAUtente({
             env,
@@ -1380,11 +1542,7 @@ export default {
               typeof corpo.url === "string"
                 ? corpo.url
                 : "/",
-            notificationId:
-              typeof corpo.notificationId ===
-              "string"
-                ? corpo.notificationId
-                : "",
+            notificationId,
             postId:
               typeof corpo.postId === "string"
                 ? corpo.postId

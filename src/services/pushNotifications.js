@@ -115,6 +115,147 @@ export const registraServiceWorkerPush = async () => {
 /**
  * Attiva le notifiche push per l'utente autenticato.
  */
+/**
+ * Salva (o aggiorna) il token del dispositivo sul profilo dell'utente.
+ */
+const salvaTokenPush = async (utente, token) => {
+  const tokenId = await generaIdToken(token);
+
+  const tokenRef = doc(
+    db,
+    "users",
+    utente.uid,
+    "pushTokens",
+    tokenId
+  );
+
+  await setDoc(
+    tokenRef,
+    {
+      token,
+      enabled: true,
+      userId: utente.uid,
+      browser: navigator.userAgent,
+      platform: navigator.platform || null,
+      permission: Notification.permission,
+      updatedAt: serverTimestamp()
+    },
+    {
+      merge: true
+    }
+  );
+
+  return tokenId;
+};
+
+/**
+ * Riallinea il token push a ogni avvio dell'app.
+ *
+ * FCM puo' ruotare il token o invalidarlo (aggiornamento del browser,
+ * dati del sito ripuliti, telefono riavviato dopo un lungo periodo):
+ * se il vecchio token resta su Firestore il dispositivo smette di
+ * ricevere notifiche senza nessun errore visibile. Qui, se il permesso
+ * e' gia' stato concesso, il token viene semplicemente riscritto.
+ */
+export const sincronizzaTokenPush = async () => {
+  const utente = auth.currentUser;
+
+  if (!utente || !VAPID_KEY) {
+    return null;
+  }
+
+  if (!("Notification" in window)) {
+    return null;
+  }
+
+  if (Notification.permission !== "granted") {
+    return null;
+  }
+
+  try {
+    const messaging = await messagingPromise;
+
+    if (!messaging) {
+      return null;
+    }
+
+    const serviceWorkerRegistration =
+      await registraServiceWorkerPush();
+
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration
+    });
+
+    if (!token) {
+      return null;
+    }
+
+    await salvaTokenPush(utente, token);
+
+    return token;
+  } catch (errore) {
+    console.warn(
+      "Impossibile sincronizzare il token push:",
+      errore
+    );
+
+    return null;
+  }
+};
+
+/**
+ * Mostra la notifica di sistema anche quando l'app e' aperta.
+ *
+ * Quando la pagina e' in primo piano il browser non visualizza da solo
+ * il messaggio FCM (arriva solo a onMessage): senza questo passaggio,
+ * su Android non compare nulla se l'app e' aperta.
+ */
+export const mostraNotificaInPrimoPiano = async (
+  payload
+) => {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  const titolo =
+    payload?.notification?.title ||
+    payload?.data?.title ||
+    "Spotted Bologna";
+
+  const corpo =
+    payload?.notification?.body ||
+    payload?.data?.body ||
+    "Hai ricevuto una nuova notifica.";
+
+  const notificationId =
+    payload?.data?.notificationId || "";
+
+  try {
+    const registrazione =
+      await navigator.serviceWorker.ready;
+
+    await registrazione.showNotification(titolo, {
+      body: corpo,
+      icon: "/logo192.png",
+      badge: "/logo192.png",
+      tag:
+        notificationId ||
+        "spotted-bologna-notification",
+      data: {
+        url: payload?.data?.url || "/",
+        notificationId: notificationId || null,
+        postId: payload?.data?.postId || null
+      }
+    });
+  } catch (errore) {
+    console.warn(
+      "Impossibile mostrare la notifica in primo piano:",
+      errore
+    );
+  }
+};
+
 export const attivaNotifichePush = async () => {
   const utente = auth.currentUser;
 
@@ -172,31 +313,9 @@ export const attivaNotifichePush = async () => {
     );
   }
 
-  const tokenId = await generaIdToken(token);
-
-  const tokenRef = doc(
-    db,
-    "users",
-    utente.uid,
-    "pushTokens",
-    tokenId
-  );
-
-  await setDoc(
-    tokenRef,
-    {
-      token,
-      enabled: true,
-      userId: utente.uid,
-      browser: navigator.userAgent,
-      platform: navigator.platform || null,
-      permission: Notification.permission,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    },
-    {
-      merge: true
-    }
+  const tokenId = await salvaTokenPush(
+    utente,
+    token
   );
 
   return {
