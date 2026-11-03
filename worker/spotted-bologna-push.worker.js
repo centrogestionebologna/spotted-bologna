@@ -110,7 +110,28 @@ async function creaJwtServiceAccount(serviceAccount) {
  * Ottiene un token OAuth Google utilizzabile sia per FCM
  * sia per Firestore.
  */
+/*
+ * Il token OAuth di Google dura un'ora: riutilizzarlo evita una
+ * richiesta per ogni notifica. Serve perche' i riepiloghi mandano un
+ * messaggio a ogni iscritto e il piano gratuito di Workers consente
+ * poche sotto-richieste per esecuzione.
+ */
+const cacheAccessToken = new Map();
+
 async function ottieniAccessToken(serviceAccount) {
+  const chiave =
+    serviceAccount?.client_email || "default";
+
+  const salvato =
+    cacheAccessToken.get(chiave);
+
+  if (
+    salvato &&
+    salvato.scadenza > Date.now() + 60000
+  ) {
+    return salvato.token;
+  }
+
   const jwt =
     await creaJwtServiceAccount(serviceAccount);
 
@@ -145,6 +166,15 @@ async function ottieniAccessToken(serviceAccount) {
       "Impossibile ottenere il token OAuth Google."
     );
   }
+
+  const durata =
+    Number(risultato.expires_in) || 3600;
+
+  cacheAccessToken.set(chiave, {
+    token: risultato.access_token,
+    scadenza:
+      Date.now() + durata * 1000
+  });
 
   return risultato.access_token;
 }
@@ -586,14 +616,16 @@ async function inviaPushAUtente({
   body,
   url,
   notificationId,
-  postId
+  postId,
+  accessToken: accessTokenPassato
 }) {
   const serviceAccount = JSON.parse(
     env.FIREBASE_SERVICE_ACCOUNT
   );
 
   const accessToken =
-    await ottieniAccessToken(serviceAccount);
+    accessTokenPassato ||
+    (await ottieniAccessToken(serviceAccount));
 
   const dispositivi =
     await recuperaTokenUtente({
@@ -868,6 +900,14 @@ notifyNewUsers:
   valoreFirestore(
     fields.notifyNewUsers
   ),
+notifyNewPosts:
+  valoreFirestore(
+    fields.notifyNewPosts
+  ),
+adminNotificationsConfigured:
+  valoreFirestore(
+    fields.adminNotificationsConfigured
+  ),
 notifyAllComments:
   valoreFirestore(
     fields.notifyAllComments
@@ -891,12 +931,26 @@ async function creaNotificaInterna({
   type,
   title,
   body,
-  postId = null
+  postId = null,
+  notificationId = null,
+  adminOnly = false
 }) {
+  /*
+   * Con un ID esplicito la notifica viene creata una volta sola: se il
+   * documento esiste gia' (stesso evento, stesso utente) Firestore
+   * risponde 409 e la push non parte. E' quello che impedisce ai
+   * riepiloghi e alle notifiche di commenti/like di arrivare doppi.
+   */
+  const suffisso = notificationId
+    ? `?documentId=${encodeURIComponent(
+        notificationId
+      )}`
+    : "";
+
   const endpoint =
     `https://firestore.googleapis.com/v1/projects/` +
     `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
-    `documents/notifications`;
+    `documents/notifications${suffisso}`;
 
   const fields = {
     userId: {
@@ -913,6 +967,9 @@ async function creaNotificaInterna({
     },
     read: {
       booleanValue: false
+    },
+    adminOnly: {
+      booleanValue: adminOnly === true
     },
     createdAt: {
       stringValue:
@@ -942,6 +999,10 @@ async function creaNotificaInterna({
       fields
     })
   });
+
+  if (risposta.status === 409) {
+    return null;
+  }
 
   const risultato = await risposta.json();
 
@@ -1312,7 +1373,773 @@ async function aggiornaNumeroIscritti({
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Notifiche agli amministratori
+ * ------------------------------------------------------------------ */
+
+const PREFERENZA_ADMIN = {
+  "new-user": "notifyNewUsers",
+  "new-post": "notifyNewPosts",
+  pending: "notifyPending",
+  report: "notifyReports"
+};
+
+/*
+ * ID stabile della notifica per un singolo admin, cosi' lo stesso
+ * evento (spotted da approvare, segnalazione, nuovo iscritto) non gli
+ * viene recapitato due volte quando la pagina viene ricaricata.
+ */
+function idNotificaAdmin({
+  type,
+  postId,
+  attore,
+  adminUid
+}) {
+  if (postId) {
+    return `${type}_${postId}_${adminUid}`;
+  }
+
+  return `${type}_${attore.uid}_${adminUid}`;
+}
+
+/*
+ * Notifica tutti gli amministratori che hanno attiva la preferenza per
+ * quel tipo di evento.
+ *
+ * Prima lo faceva il browser dell'autore: ma un utente normale non
+ * puo' leggere la collezione users (regole Firestore), quindi elenco e
+ * preferenze degli admin erano invisibili e le notifiche non
+ * partivano. Con il service account funziona per tutti.
+ */
+async function notificaAmministratoriServer({
+  env,
+  accessToken,
+  attore,
+  type,
+  title,
+  testo,
+  postId = null,
+  inviaPush = true
+}) {
+  const campo = PREFERENZA_ADMIN[type];
+
+  if (!campo) {
+    throw new Error(
+      "Tipo di notifica per gli amministratori non valido."
+    );
+  }
+
+  const amministratori =
+    await recuperaAmministratori({
+      env,
+      accessToken
+    });
+
+  const abilitati = amministratori.filter(
+    (admin) => {
+      /* Chi si iscrive non deve ricevere la notifica di se stesso. */
+      if (
+        type === "new-user" &&
+        admin.uid === attore.uid
+      ) {
+        return false;
+      }
+
+      if (admin.adminNotificationsConfigured) {
+        return admin[campo] !== false;
+      }
+
+      return true;
+    }
+  );
+
+  let notificate = 0;
+  let pushInviate = 0;
+  let pushFallite = 0;
+
+  for (const admin of abilitati) {
+    const notificationId = idNotificaAdmin({
+      type,
+      postId,
+      attore,
+      adminUid: admin.uid
+    });
+
+    try {
+      const notifica =
+        await creaNotificaInterna({
+          env,
+          accessToken,
+          userId: admin.uid,
+          type,
+          title,
+          body: testo,
+          postId,
+          notificationId,
+          adminOnly: true
+        });
+
+      if (!notifica) continue;
+
+      notificate += 1;
+
+      if (!inviaPush) continue;
+
+      const push = await inviaPushAUtente({
+        env,
+        accessToken,
+        recipientUserId: admin.uid,
+        title,
+        body: testo,
+        url: "/",
+        notificationId,
+        postId: postId || ""
+      });
+
+      pushInviate += push.sent;
+      pushFallite += push.failed;
+    } catch (errore) {
+      console.error(
+        "Notifica admin non inviata a",
+        admin.uid,
+        errore
+      );
+    }
+  }
+
+  return {
+    admins: amministratori.length,
+    enabled: abilitati.length,
+    notificate,
+    pushInviate,
+    pushFallite
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Notifiche per commenti e like su uno spotted
+ * ------------------------------------------------------------------ */
+
+/*
+ * Il browser di chi commenta non puo' leggere i profili degli altri
+ * utenti (le regole Firestore lo vietano) e quindi non riesce a sapere
+ * chi segue lo spotted ne' quali preferenze ha attive: le notifiche
+ * arrivavano solo ad alcune categorie. Qui il service account legge
+ * seguaci e preferenze e scrive le notifiche al posto loro.
+ */
+async function recuperaFollowerPost({
+  env,
+  accessToken,
+  postId
+}) {
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents:runQuery`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [
+          {
+            collectionId: "postFollowers",
+            allDescendants: false
+          }
+        ],
+        where: {
+          fieldFilter: {
+            field: {
+              fieldPath: "postId"
+            },
+            op: "EQUAL",
+            value: {
+              stringValue: postId
+            }
+          }
+        }
+      }
+    })
+  });
+
+  const risultato = await risposta.json();
+
+  if (!risposta.ok) {
+    console.error(
+      "Errore ricerca seguaci dello spotted:",
+      risultato
+    );
+
+    return [];
+  }
+
+  return risultato
+    .filter((elemento) => elemento.document)
+    .map((elemento) =>
+      valoreFirestore(
+        elemento.document.fields?.userId
+      )
+    )
+    .filter(
+      (userId) =>
+        typeof userId === "string" &&
+        userId !== ""
+    );
+}
+
+/*
+ * Tutti i profili, con le preferenze di notifica.
+ */
+async function recuperaProfiliUtenti({
+  env,
+  accessToken
+}) {
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents:runQuery`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [
+          {
+            collectionId: "users",
+            allDescendants: false
+          }
+        ]
+      }
+    })
+  });
+
+  const risultato = await risposta.json();
+
+  if (!risposta.ok) {
+    console.error(
+      "Errore lettura profili:",
+      risultato
+    );
+
+    throw new Error(
+      "Impossibile leggere i profili degli utenti."
+    );
+  }
+
+  return risultato
+    .filter((elemento) => elemento.document)
+    .map((elemento) => {
+      const documento = elemento.document;
+      const fields = documento.fields || {};
+
+      return {
+        uid: documento.name.split("/").pop(),
+        nickname:
+          valoreFirestore(fields.nickname),
+        role: valoreFirestore(fields.role),
+        newsletter:
+          valoreFirestore(fields.newsletter),
+        notifyComments: valoreFirestore(
+          fields.notifyComments
+        ),
+        notifyLikes: valoreFirestore(
+          fields.notifyLikes
+        ),
+        notifyAllComments: valoreFirestore(
+          fields.notifyAllComments
+        ),
+        notifyAllLikes: valoreFirestore(
+          fields.notifyAllLikes
+        )
+      };
+    });
+}
+
+/*
+ * Notifica immediata di un commento o di un like.
+ *
+ * Destinatari: chi segue lo spotted se ha attiva la preferenza per
+ * commenti o like, piu' gli amministratori che hanno attivato “tutti i
+ * commenti” / “tutti i like”.
+ */
+async function notificaAttivitaPost({
+  env,
+  accessToken,
+  attore,
+  type,
+  postId,
+  eventId,
+  testo
+}) {
+  const campoFollower =
+    type === "like"
+      ? "notifyLikes"
+      : "notifyComments";
+
+  const campoAdmin =
+    type === "like"
+      ? "notifyAllLikes"
+      : "notifyAllComments";
+
+  const titolo =
+    type === "like"
+      ? "❤️ Nuovo like"
+      : "💬 Nuovo commento";
+
+  const nome =
+    (attore.nickname || "Un utente")
+      .toString()
+      .slice(0, 60);
+
+  const corpoFollower =
+    type === "like"
+      ? `${nome} ha lasciato un like su uno spotted che segui`
+      : `${nome} ha commentato uno spotted che segui`;
+
+  const corpoAdmin =
+    testo ||
+    (type === "like"
+      ? `${nome} ha lasciato un like`
+      : `Nuovo commento di ${nome}`);
+
+  const profili =
+    await recuperaProfiliUtenti({
+      env,
+      accessToken
+    });
+
+  const profiloPerUid = new Map(
+    profili.map((profilo) => [
+      profilo.uid,
+      profilo
+    ])
+  );
+
+  const destinatari = new Map();
+
+  const seguaci =
+    await recuperaFollowerPost({
+      env,
+      accessToken,
+      postId
+    });
+
+  for (const uid of seguaci) {
+    if (uid === attore.uid) continue;
+
+    const profilo = profiloPerUid.get(uid);
+
+    if (profilo?.[campoFollower] === true) {
+      destinatari.set(uid, {
+        body: corpoFollower
+      });
+    }
+  }
+
+  for (const profilo of profili) {
+    if (profilo.uid === attore.uid) continue;
+    if (profilo.role !== "admin") continue;
+    if (profilo[campoAdmin] !== true) continue;
+    if (destinatari.has(profilo.uid)) continue;
+
+    destinatari.set(profilo.uid, {
+      body: corpoAdmin
+    });
+  }
+
+  let notificate = 0;
+  let pushInviate = 0;
+  let pushFallite = 0;
+
+  for (const [uid, dato] of destinatari) {
+    const notificationId =
+      `activity_${type}_${eventId}_${uid}`;
+
+    try {
+      const notifica =
+        await creaNotificaInterna({
+          env,
+          accessToken,
+          userId: uid,
+          type,
+          title: titolo,
+          body: dato.body,
+          postId,
+          notificationId
+        });
+
+      if (!notifica) continue;
+
+      notificate += 1;
+
+      const push =
+        await inviaPushAUtente({
+          env,
+          accessToken,
+          recipientUserId: uid,
+          title: titolo,
+          body: dato.body,
+          url: "/",
+          notificationId,
+          postId
+        });
+
+      pushInviate += push.sent;
+      pushFallite += push.failed;
+    } catch (errore) {
+      console.error(
+        "Notifica attività non inviata a",
+        uid,
+        errore
+      );
+    }
+  }
+
+  return {
+    type,
+    postId,
+    destinatari: destinatari.size,
+    notificate,
+    pushInviate,
+    pushFallite
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Riepiloghi giornalieri e settimanali
+ * ------------------------------------------------------------------ */
+
+const FUSO_ITALIA = "Europe/Rome";
+const ORA_RIEPILOGO = 14;
+
+/* Data locale italiana nel formato YYYY-MM-DD. */
+function dataChiaveItalia(adesso) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO_ITALIA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(adesso);
+}
+
+/* Ora e giorno della settimana in Italia. */
+function partiDataItalia(adesso) {
+  const parti = new Intl.DateTimeFormat(
+    "it-IT",
+    {
+      timeZone: FUSO_ITALIA,
+      hour: "2-digit",
+      hourCycle: "h23",
+      weekday: "short"
+    }
+  ).formatToParts(adesso);
+
+  const ora = Number(
+    parti.find(
+      (parte) => parte.type === "hour"
+    )?.value
+  );
+
+  const giorno =
+    parti.find(
+      (parte) => parte.type === "weekday"
+    )?.value || "";
+
+  return { ora, giorno };
+}
+
+/* Quanti documenti sono stati creati dopo un certo istante. */
+async function contaDocumentiCreatiDopo({
+  env,
+  accessToken,
+  collectionId,
+  inizioISO
+}) {
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents:runAggregationQuery`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      structuredAggregationQuery: {
+        structuredQuery: {
+          from: [
+            {
+              collectionId,
+              allDescendants: false
+            }
+          ],
+          where: {
+            fieldFilter: {
+              field: {
+                fieldPath: "createdAt"
+              },
+              op: "GREATER_THAN_OR_EQUAL",
+              value: {
+                stringValue: inizioISO
+              }
+            }
+          }
+        },
+        aggregations: [
+          {
+            alias: "totale",
+            count: {}
+          }
+        ]
+      }
+    })
+  });
+
+  const risultato = await risposta.json();
+
+  if (!risposta.ok) {
+    console.error(
+      `Errore conteggio ${collectionId}:`,
+      risultato
+    );
+
+    return 0;
+  }
+
+  const totale = Number(
+    risultato?.[0]?.result
+      ?.aggregateFields?.totale
+      ?.integerValue
+  );
+
+  return Number.isFinite(totale) ? totale : 0;
+}
+
+/*
+ * Invia il riepilogo a chi ha scelto quella frequenza.
+ *
+ * period: "daily" (ultime 24 ore) oppure "weekly" (ultimi 7 giorni).
+ * L'ID della notifica contiene giorno e utente: se il riepilogo viene
+ * ricalcolato (retry del cron, prova manuale) non arriva due volte.
+ */
+async function eseguiRiepilogo({
+  env,
+  period,
+  dryRun = false
+}) {
+  const serviceAccount = JSON.parse(
+    env.FIREBASE_SERVICE_ACCOUNT
+  );
+
+  const accessToken =
+    await ottieniAccessToken(serviceAccount);
+
+  const adesso = new Date();
+
+  const settimanale = period === "weekly";
+
+  const durata = settimanale
+    ? 7 * 24 * 60 * 60 * 1000
+    : 24 * 60 * 60 * 1000;
+
+  const inizioISO = new Date(
+    adesso.getTime() - durata
+  ).toISOString();
+
+  const spots =
+    await contaDocumentiCreatiDopo({
+      env,
+      accessToken,
+      collectionId: "posts",
+      inizioISO
+    });
+
+  const commenti =
+    await contaDocumentiCreatiDopo({
+      env,
+      accessToken,
+      collectionId: "comments",
+      inizioISO
+    });
+
+  const titolo = settimanale
+    ? "📅 Riepilogo della settimana"
+    : "☀️ Riepilogo di ieri";
+
+  /*
+   * Se non e' stato pubblicato nulla, il riepilogo invita a scrivere:
+   * una notifica vuota sarebbe solo rumore.
+   */
+  const corpo =
+    spots === 0
+      ? "Nessuno nuovo spotted, scrivine uno te!"
+      : settimanale
+        ? `Questa settimana ${spots} nuovi spotted e ${commenti} commenti.`
+        : `Ieri ${spots} nuovi spotted e ${commenti} commenti.`;
+
+  const preferenza = settimanale
+    ? "settimanale"
+    : "giornaliera";
+
+  const profili = await recuperaProfiliUtenti({
+    env,
+    accessToken
+  });
+
+  const destinatari = profili.filter(
+    (profilo) =>
+      profilo.newsletter === preferenza
+  );
+
+  const chiave =
+    `${settimanale ? "weekly" : "daily"}_` +
+    `${dataChiaveItalia(adesso)}`;
+
+  if (dryRun) {
+    return {
+      period,
+      inizio: inizioISO,
+      titolo,
+      corpo,
+      spots,
+      commenti,
+      destinatari: destinatari.length,
+      notificate: 0,
+      pushInviate: 0,
+      pushFallite: 0
+    };
+  }
+
+  let notificate = 0;
+  let pushInviate = 0;
+  let pushFallite = 0;
+
+  for (const profilo of destinatari) {
+    const notificationId =
+      `${chiave}_${profilo.uid}`;
+
+    try {
+      const notifica =
+        await creaNotificaInterna({
+          env,
+          accessToken,
+          userId: profilo.uid,
+          type: "digest",
+          title: titolo,
+          body: corpo,
+          postId: null,
+          notificationId
+        });
+
+      if (!notifica) continue;
+
+      notificate += 1;
+
+      const push = await inviaPushAUtente({
+        env,
+        accessToken,
+        recipientUserId: profilo.uid,
+        title: titolo,
+        body: corpo,
+        url: "/",
+        notificationId,
+        postId: ""
+      });
+
+      pushInviate += push.sent;
+      pushFallite += push.failed;
+    } catch (errore) {
+      console.error(
+        "Riepilogo non inviato a",
+        profilo.uid,
+        errore
+      );
+    }
+  }
+
+  console.log(
+    `Riepilogo ${period} ${chiave}:`,
+    spots,
+    "spotted,",
+    notificate,
+    "notifiche,",
+    pushInviate,
+    "push"
+  );
+
+  return {
+    period,
+    inizio: inizioISO,
+    titolo,
+    corpo,
+    spots,
+    commenti,
+    destinatari: destinatari.length,
+    notificate,
+    pushInviate,
+    pushFallite
+  };
+}
+
+/*
+ * Eseguito dal cron di Cloudflare ogni ora: manda i riepiloghi solo
+ * quando in Italia sono le 14 (e la domenica anche quello settimanale).
+ * Controllare l'ora qui invece che nel cron mantiene l'orario giusto
+ * anche con il cambio dell'ora legale.
+ */
+async function eseguiRiepiloghiAutomatici(env) {
+  const adesso = new Date();
+  const { ora, giorno } = partiDataItalia(adesso);
+
+  if (ora !== ORA_RIEPILOGO) {
+    return;
+  }
+
+  await eseguiRiepilogo({
+    env,
+    period: "daily"
+  });
+
+  if (giorno.toLowerCase().startsWith("dom")) {
+    await eseguiRiepilogo({
+      env,
+      period: "weekly"
+    });
+  }
+}
+
 export default {
+  /*
+   * Cron Trigger: ogni ora, l'orario vero viene deciso in
+   * eseguiRiepiloghiAutomatici.
+   */
+  async scheduled(event, env, ctx) {
+    const esecuzione = eseguiRiepiloghiAutomatici(
+      env
+    ).catch((errore) => {
+      console.error(
+        "Errore riepiloghi automatici:",
+        errore
+      );
+    });
+
+    if (ctx?.waitUntil) {
+      ctx.waitUntil(esecuzione);
+    } else {
+      await esecuzione;
+    }
+  },
+
   async fetch(request, env) {
     const origin =
       request.headers.get("Origin") || "";
@@ -2461,6 +3288,360 @@ if (
             error:
               errore.message ||
               "Errore durante il conteggio degli iscritti."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Notifica agli amministratori (nuovo iscritto, nuovo spotted,
+     * pending, segnalazione). La chiama il browser dell'autore
+     * dell'azione; l'elenco admin e le preferenze li legge il Worker.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/notify-admins"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const type =
+          typeof corpo.type === "string"
+            ? corpo.type.trim()
+            : "";
+
+        const title =
+          typeof corpo.title === "string"
+            ? corpo.title.trim().slice(0, 120)
+            : "";
+
+        const testo =
+          typeof corpo.body === "string"
+            ? corpo.body.trim().slice(0, 300)
+            : "";
+
+        const postId =
+          typeof corpo.postId === "string" &&
+          corpo.postId.trim() !== ""
+            ? corpo.postId.trim()
+            : null;
+
+        if (!PREFERENZA_ADMIN[type] || !title || !testo) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Tipo, titolo o testo della notifica non validi."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(
+            serviceAccount
+          );
+
+        const risultato =
+          await notificaAmministratoriServer({
+            env,
+            accessToken,
+            attore: { uid: identita.uid },
+            type,
+            title,
+            testo,
+            postId,
+            inviaPush: corpo.inviaPush !== false
+          });
+
+        return rispostaJson(
+          {
+            success: true,
+            ...risultato
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /notify-admins:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante la notifica agli amministratori."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Notifica immediata di un commento o di un like.
+     *
+     * La chiama il browser dell'autore del commento/like: qui il
+     * service account legge seguaci e preferenze e manda le notifiche
+     * a chi le ha attive.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/notify-post-activity"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const type =
+          corpo.type === "like"
+            ? "like"
+            : corpo.type === "comment"
+              ? "comment"
+              : "";
+
+        const postId =
+          typeof corpo.postId === "string"
+            ? corpo.postId.trim()
+            : "";
+
+        const eventId =
+          typeof corpo.eventId === "string"
+            ? corpo.eventId.trim()
+            : "";
+
+        const testo =
+          typeof corpo.testo === "string"
+            ? corpo.testo.trim().slice(0, 240)
+            : "";
+
+        if (!type || !postId || !eventId) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Tipo, spotted o evento mancante."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(
+            serviceAccount
+          );
+
+        const documentoAttore =
+          await leggiDocumentoConServiceAccount(
+            {
+              env,
+              accessToken,
+              percorso:
+                `users/${identita.uid}`
+            }
+          );
+
+        const attore = {
+          uid: identita.uid,
+          nickname: valoreFirestore(
+            documentoAttore?.fields?.nickname
+          )
+        };
+
+        const risultato =
+          await notificaAttivitaPost({
+            env,
+            accessToken,
+            attore,
+            type,
+            postId,
+            eventId,
+            testo
+          });
+
+        return rispostaJson(
+          {
+            success: true,
+            ...risultato
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /notify-post-activity:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante la notifica dell'attività."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Prova manuale dei riepiloghi, riservata agli admin.
+     * Con dryRun: true calcola testo e destinatari senza inviare nulla.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname === "/digest"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono inviare i riepiloghi."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const risultato = await eseguiRiepilogo({
+          env,
+          period:
+            corpo.period === "weekly"
+              ? "weekly"
+              : "daily",
+          dryRun: corpo.dryRun === true
+        });
+
+        return rispostaJson(
+          {
+            success: true,
+            ...risultato
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /digest:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante il riepilogo."
           },
           500,
           origin,

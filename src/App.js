@@ -32,7 +32,9 @@ import { auth, provider, db } from "./firebase";
 
 import {
   inviaPushAUtente,
-  aggiornaConteggioIscrittiServer
+  aggiornaConteggioIscrittiServer,
+  notificaAttivitaPost,
+  notificaAmministratoriServer
 } from "./services/pushSender";
 
 import {
@@ -232,6 +234,15 @@ function App() {
   const notificaUtenteRef = useRef(notificaUtente);
   notificaUtenteRef.current = notificaUtente;
 
+  /*
+   * Le notifiche per gli amministratori le manda il Worker.
+   *
+   * Le regole Firestore non permettono a un utente normale di leggere
+   * la collezione users: da qui non era possibile sapere chi sono gli
+   * amministratori ne' quali preferenze hanno attive, quindi quando a
+   * pubblicare o a segnalare era un utente gli admin non ricevevano
+   * nulla. Il Worker usa il service account e conosce entrambe le cose.
+   */
   const notificaAmministratori = async ({
     type,
     title,
@@ -240,89 +251,19 @@ function App() {
     inviaPush = true
   }) => {
     try {
-      const amministratori = await getDocs(
-        query(collection(db, "users"), where("role", "==", "admin"))
-      );
-      const preferenzaPerTipo = {
-        "new-user": "notifyNewUsers",
-        "new-post": "notifyNewPosts",
-        pending: "notifyPending",
-        report: "notifyReports",
-        comment: "notifyAllComments",
-        like: "notifyAllLikes"
-      }[type];
-      const eventoAdminRiservato = ["new-user", "new-post", "pending", "report"].includes(type);
-
-      await Promise.allSettled(
-        amministratori.docs.map((admin) => {
-          const datiAdmin = admin.data();
-          const preferenzaAttiva = eventoAdminRiservato
-            ? (
-                !datiAdmin.adminNotificationsConfigured ||
-                datiAdmin[preferenzaPerTipo] !== false
-              )
-            : datiAdmin[preferenzaPerTipo] === true;
-
-          return notificaUtente({
-            userId: admin.id,
-            type,
-            title,
-            body,
-            postId,
-            adminOnly: true,
-            notificationId:
-              postId && type === "pending"
-                ? `pending_${postId}_${admin.id}`
-                : postId && type === "new-post"
-                  ? `new-post_${postId}_${admin.id}`
-                  : null,
-            inviaPush: inviaPush && preferenzaAttiva,
-            salvaNotifica: preferenzaAttiva
-          });
-        })
-      );
+      await notificaAmministratoriServer({
+        type,
+        title,
+        body,
+        postId,
+        inviaPush
+      });
     } catch (errore) {
-      console.error("Impossibile trovare gli amministratori da notificare:", errore);
+      console.error(
+        "Notifica agli amministratori non inviata:",
+        errore
+      );
     }
-  };
-
-  const notificaFollowerPost = async ({
-    postId,
-    type,
-    title,
-    body,
-    preferenza
-  }) => {
-    const followersSnapshot = await getDocs(
-      query(
-        collection(db, "postFollowers"),
-        where("postId", "==", postId)
-      )
-    );
-
-    await Promise.allSettled(
-      followersSnapshot.docs
-        .filter((follower) => follower.data().userId !== user?.uid)
-        .map(async (follower) => {
-          const followerId = follower.data().userId;
-          const followerSnap = await getDoc(
-            doc(db, "users", followerId)
-          );
-
-          if (
-            followerSnap.exists() &&
-            followerSnap.data()[preferenza] === true
-          ) {
-            await notificaUtente({
-              userId: followerId,
-              type,
-              title,
-              body,
-              postId
-            });
-          }
-        })
-    );
   };
 
   const [nickname, setNickname] = useState("");
@@ -1549,29 +1490,36 @@ const inviaCommento = async (postId) => {
   const nicknameUtente =
     userDoc.data().nickname;
 
-  await addDoc(collection(db, "comments"), {
-  postId: postId,
-  userId: user.uid,
-  nickname: nicknameUtente,
-  text: testo,
-  createdAt: new Date().toISOString()
-});
+  const commentoRef = await addDoc(
+    collection(db, "comments"),
+    {
+      postId: postId,
+      userId: user.uid,
+      nickname: nicknameUtente,
+      text: testo,
+      createdAt: new Date().toISOString()
+    }
+  );
 
-await notificaAmministratori({
-  type: "comment",
-  title: "💬 Nuovo commento",
-  body: testo,
-  postId,
-  inviaPush: true
-});
-
-await notificaFollowerPost({
-  postId,
-  type: "comment",
-  title: "💬 Nuovo commento",
-  body: `${nicknameUtente} ha commentato uno spotted che segui`,
-  preferenza: "notifyComments"
-});
+/*
+ * Le notifiche le manda il Worker: il browser di chi commenta non puo'
+ * leggere i profili degli altri utenti (le regole Firestore lo vietano)
+ * e quindi non sa chi segue lo spotted ne' chi ha attivo l'avviso per
+ * i commenti. L'ID del commento rende la notifica unica.
+ */
+try {
+  await notificaAttivitaPost({
+    type: "comment",
+    postId,
+    eventId: commentoRef.id,
+    testo
+  });
+} catch (erroreNotifica) {
+  console.warn(
+    "Commento salvato, notifica non inviata:",
+    erroreNotifica
+  );
+}
 
   setCommentInputs({
   ...commentInputs,
@@ -1604,7 +1552,7 @@ const toggleLike = async (postId) => {
       doc(db, "users", user.uid)
     );
 
-    await addDoc(
+    const likeRef = await addDoc(
       collection(db, "likes"),
       {
         postId: postId,
@@ -1613,21 +1561,22 @@ const toggleLike = async (postId) => {
       }
     );
 
-await notificaFollowerPost({
-  postId,
-  type: "like",
-  title: "❤️ Nuovo like",
-  body: `${userDoc.data().nickname} ha lasciato un like`,
-  preferenza: "notifyLikes"
-});
-
-await notificaAmministratori({
-  type: "like",
-  title: "❤️ Nuovo like",
-  body: userDoc.data().nickname || "Nuovo like",
-  postId,
-  inviaPush: true
-});
+/*
+ * Come per i commenti: seguaci e preferenze le legge il Worker, e
+ * l'ID del like impedisce che la stessa notifica parta due volte.
+ */
+try {
+  await notificaAttivitaPost({
+    type: "like",
+    postId,
+    eventId: likeRef.id
+  });
+} catch (erroreNotifica) {
+  console.warn(
+    "Like salvato, notifica non inviata:",
+    erroreNotifica
+  );
+}
 
   }
 

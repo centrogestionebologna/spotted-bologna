@@ -16,6 +16,29 @@ const VAPID_KEY =
   process.env.REACT_APP_FIREBASE_VAPID_KEY;
 
 /**
+ * Su iPhone le notifiche push esistono solo per il sito installato
+ * sulla schermata Home (iOS 16.4 o successivo): in una normale scheda
+ * di Safari l'API non e' disponibile e l'attivazione fallirebbe senza
+ * spiegare il perche'.
+ */
+export const infoSupportoPush = () => {
+  const ua = navigator.userAgent || "";
+
+  const iOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === "MacIntel" &&
+      navigator.maxTouchPoints > 1);
+
+  const standalone =
+    window.matchMedia?.(
+      "(display-mode: standalone)"
+    )?.matches === true ||
+    window.navigator.standalone === true;
+
+  return { iOS, standalone };
+};
+
+/**
  * Crea un identificatore stabile del token.
  * In questo modo non salviamo il token come ID diretto del documento.
  */
@@ -172,6 +195,12 @@ export const sincronizzaTokenPush = async () => {
     return null;
   }
 
+  const supporto = infoSupportoPush();
+
+  if (supporto.iOS && !supporto.standalone) {
+    return null;
+  }
+
   try {
     const messaging = await messagingPromise;
 
@@ -268,6 +297,14 @@ export const attivaNotifichePush = async () => {
   if (!VAPID_KEY) {
     throw new Error(
       "Chiave VAPID mancante. Controlla il file .env e riavvia React."
+    );
+  }
+
+  const supporto = infoSupportoPush();
+
+  if (supporto.iOS && !supporto.standalone) {
+    throw new Error(
+      "Su iPhone le notifiche funzionano solo dall'app installata: tocca Condividi, scegli “Aggiungi alla schermata Home” e riapri Spotted Bologna da li'."
     );
   }
 

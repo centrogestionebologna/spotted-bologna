@@ -1,7 +1,8 @@
 import { useState } from "react";
 
 import {
-  attivaNotifichePush
+  attivaNotifichePush,
+  infoSupportoPush
 } from "../services/pushNotifications";
 
 function ProfileCard({
@@ -42,6 +43,12 @@ function ProfileCard({
 
 const [attivazionePush, setAttivazionePush] =
   useState(false);
+
+const supportoPush = infoSupportoPush();
+
+const notificheGiaAttive =
+  typeof Notification !== "undefined" &&
+  Notification.permission === "granted";
 
 const [messaggioPush, setMessaggioPush] =
   useState("");
@@ -105,6 +112,27 @@ const gestisciAttivazionePush = async () => {
       : "Attiva notifiche push"}
   </button>
 
+  {supportoPush.iOS &&
+    !supportoPush.standalone && (
+      <p className="push-notifications-message">
+        📱 Su iPhone le notifiche
+        funzionano solo dall'app
+        installata: tocca Condividi,
+        scegli “Aggiungi alla
+        schermata Home” e riapri
+        Spotted Bologna dall'icona.
+      </p>
+    )}
+
+  {notificheGiaAttive &&
+    !(supportoPush.iOS &&
+      !supportoPush.standalone) && (
+      <p className="push-notifications-message">
+        🔔 Notifiche attive su questo
+        dispositivo.
+      </p>
+    )}
+
   {messaggioPush && (
     <p className="push-notifications-message">
       {messaggioPush}
@@ -139,7 +167,9 @@ const gestisciAttivazionePush = async () => {
                   setNewsletter("giornaliera")
                 }
               />
-              <span>Giornaliera</span>
+              <span>
+                Giornaliera — riepilogo alle 14
+              </span>
             </label>
 
             <label className="newsletter-option">
@@ -151,7 +181,10 @@ const gestisciAttivazionePush = async () => {
                   setNewsletter("settimanale")
                 }
               />
-              <span>Settimanale</span>
+              <span>
+                Settimanale — riepilogo
+                domenica alle 14
+              </span>
             </label>
 
             {isAdmin && (

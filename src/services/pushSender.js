@@ -116,6 +116,65 @@ export const notificaNuovoUtente = async () => {
   );
 };
 
+/*
+ * Notifica tutti gli amministratori che hanno attiva la preferenza per
+ * quel tipo di evento (nuovo iscritto, nuovo spotted, pending,
+ * segnalazione). Elenco e preferenze li legge il Worker.
+ */
+export const notificaAmministratoriServer = async ({
+  type,
+  title,
+  body,
+  postId = null,
+  inviaPush = true
+}) => {
+  return eseguiRichiestaWorker(
+    "/notify-admins",
+    {
+      type,
+      title,
+      body,
+      postId: postId || "",
+      inviaPush
+    }
+  );
+};
+
+/*
+ * Notifica immediata di un commento o di un like.
+ *
+ * Il Worker decide i destinatari (seguaci dello spotted con la
+ * preferenza attiva, piu' gli admin che ricevono tutti i commenti o
+ * tutti i like) e manda loro notifica e push.
+ */
+export const notificaAttivitaPost = async ({
+  type,
+  postId,
+  eventId,
+  testo = ""
+}) => {
+  if (
+    !postId ||
+    !eventId ||
+    !type
+  ) {
+    return null;
+  }
+
+  return eseguiRichiestaWorker(
+    "/notify-post-activity",
+    {
+      type,
+      postId: String(postId).trim(),
+      eventId: String(eventId).trim(),
+      testo:
+        typeof testo === "string"
+          ? testo.slice(0, 240)
+          : ""
+    }
+  );
+};
+
 export const inviaPushAUtente = async ({
   recipientUserId,
   title,

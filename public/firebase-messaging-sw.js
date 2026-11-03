@@ -46,16 +46,24 @@ messaging.onBackgroundMessage((payload) => {
       "Hai ricevuto una nuova notifica.",
     icon: "/logo192.png",
     badge: "/logo192.png",
-    tag:
-      payload.data?.notificationId ||
-      "spotted-bologna-notification",
-    renotify: true,
     data: {
       url: payload.data?.url || "/",
       notificationId: payload.data?.notificationId || null,
       postId: payload.data?.postId || null
     }
   };
+
+  /*
+   * Con il tag il sistema sostituisce la notifica dello stesso evento
+   * invece di impilarne una copia: se il messaggio viene ripetuto, il
+   * destinatario la vede una volta sola. Senza ID il tag non va messo,
+   * altrimenti notifiche diverse si sovrascriverebbero tra loro.
+   */
+  if (payload.data?.notificationId) {
+    opzioni.tag =
+      payload.data.notificationId;
+    opzioni.renotify = false;
+  }
 
   return self.registration.showNotification(titolo, opzioni);
 });
