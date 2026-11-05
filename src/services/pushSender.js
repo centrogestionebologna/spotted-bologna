@@ -211,6 +211,49 @@ export const notificaComunicazioneServizio = async ({
   );
 };
 
+/*
+ * Sblocco del link di una proposta gruppo: il Worker conta i like,
+ * segna lo sblocco e avvisa tutti quelli che avevano messo like. Gli
+ * invii vanno a lotti, quindi si ripete finche' hasMore e' true.
+ */
+export const notificaSbloccoGruppo = async ({
+  postId,
+  cursor = ""
+}) => {
+  if (!postId || typeof postId !== "string") {
+    return null;
+  }
+
+  return eseguiRichiestaWorker(
+    "/notify-unlock",
+    {
+      postId: postId.trim(),
+      cursor: String(cursor || "")
+    }
+  );
+};
+
+/*
+ * Approvazione admin del cambio nickname: il Worker rinomina l'utente
+ * e tutte le sue attività con una sola chiamata.
+ */
+export const approvaCambioNickname = async ({
+  requestId
+}) => {
+  if (!requestId || typeof requestId !== "string") {
+    throw new Error(
+      "Richiesta di cambio nickname mancante."
+    );
+  }
+
+  return eseguiRichiestaWorker(
+    "/approve-nickname",
+    {
+      requestId: requestId.trim()
+    }
+  );
+};
+
 export const inviaPushAUtente = async ({
   recipientUserId,
   title,

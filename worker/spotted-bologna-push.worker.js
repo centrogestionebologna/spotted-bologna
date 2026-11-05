@@ -502,8 +502,19 @@ async function inviaPush({
     `https://fcm.googleapis.com/v1/projects/` +
     `${env.FIREBASE_PROJECT_ID}/messages:send`;
 
+  /*
+   * Se la notifica riguarda uno spotted, il clic deve portare su quello
+   * spotted e non sulla home: l'app legge ?spotted=<id> e scorre fino
+   * alla card. La home resta il ripiego quando l'URL e' già esplicito.
+   */
+  const destinazione =
+    postId &&
+    (!url || url === "/")
+      ? `/?spotted=${encodeURIComponent(postId)}`
+      : url;
+
   const urlAssoluto =
-    creaUrlAssoluto(url, env);
+    creaUrlAssoluto(destinazione, env);
 
   /*
    * FCM accetta come destinazione del clic solo URL HTTPS: se APP_URL
@@ -1670,6 +1681,157 @@ async function recuperaProfiliUtenti({
  * commenti o like, piu' gli amministratori che hanno attivato “tutti i
  * commenti” / “tutti i like”.
  */
+/*
+ * Anteprima breve del testo di uno spotted, per far capire subito a
+ * quale spotted si riferisce una notifica di commento o di like.
+ */
+function anteprimaTesto(testo, massimo = 70) {
+  const pulito = String(testo || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!pulito) return "";
+
+  return pulito.length > massimo
+    ? `${pulito.slice(0, massimo).trim()}…`
+    : pulito;
+}
+
+/*
+ * Documenti di una collezione con un campo uguale a un valore.
+ * Una sola query: serve sia per i like di uno spotted sia per
+ * rinominare in blocco commenti e like di un utente.
+ */
+async function recuperaDocumentiPerCampo({
+  env,
+  accessToken,
+  collectionId,
+  campo,
+  valore
+}) {
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents:runQuery`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [
+          {
+            collectionId,
+            allDescendants: false
+          }
+        ],
+        where: {
+          fieldFilter: {
+            field: {
+              fieldPath: campo
+            },
+            op: "EQUAL",
+            value: {
+              stringValue: valore
+            }
+          }
+        }
+      }
+    })
+  });
+
+  const risultato = await risposta.json();
+
+  if (!risposta.ok) {
+    console.error(
+      "Errore ricerca documenti:",
+      collectionId,
+      risultato
+    );
+
+    return [];
+  }
+
+  if (!Array.isArray(risultato)) return [];
+
+  return risultato
+    .filter((elemento) => elemento.document)
+    .map((elemento) => ({
+      name: elemento.document.name,
+      fields: elemento.document.fields || {}
+    }));
+}
+
+/*
+ * Aggiorna più documenti in una sola richiesta Firestore.
+ *
+ * Una PATCH per documento esaurirebbe in fretta il limite di
+ * sotto-richieste del piano gratuito: con :commit l'aggiornamento di
+ * tutte le attività di un utente costa una sola chiamata.
+ */
+async function aggiornaDocumentiInBlocco({
+  env,
+  accessToken,
+  documenti
+}) {
+  if (documenti.length === 0) return 0;
+
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents:commit`;
+
+  let aggiornati = 0;
+
+  /* Il limite Firestore e' 500 scritture per commit. */
+  for (let inizio = 0; inizio < documenti.length; inizio += 400) {
+    const lotto = documenti.slice(inizio, inizio + 400);
+
+    const writes = lotto.map((documento) => ({
+      update: {
+        name: documento.name,
+        fields: documento.fields
+      },
+      updateMask: {
+        fieldPaths: Object.keys(
+          documento.fields
+        )
+      }
+    }));
+
+    const risposta = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ writes })
+    });
+
+    const risultato = await risposta
+      .json()
+      .catch(() => null);
+
+    if (!risposta.ok) {
+      console.error(
+        "Errore aggiornamento in blocco:",
+        risultato
+      );
+
+      throw new Error(
+        "Impossibile aggiornare i documenti collegati."
+      );
+    }
+
+    aggiornati += lotto.length;
+  }
+
+  return aggiornati;
+}
+
 async function notificaAttivitaPost({
   env,
   accessToken,
@@ -1699,16 +1861,38 @@ async function notificaAttivitaPost({
       .toString()
       .slice(0, 60);
 
+  /*
+   * Il testo dello spotted nell'anteprima: senza, chi riceve la
+   * notifica non sa a quale spotted si riferisce il commento o il like.
+   */
+  const documentoPost =
+    await leggiDocumentoConServiceAccount({
+      env,
+      accessToken,
+      percorso: `posts/${postId}`
+    }).catch(() => null);
+
+  const anteprima = anteprimaTesto(
+    valoreFirestore(
+      documentoPost?.fields?.text
+    )
+  );
+
+  const riferimentoSpotted = anteprima
+    ? `«${anteprima}»`
+    : "uno spotted che segui";
+
   const corpoFollower =
     type === "like"
-      ? `${nome} ha lasciato un like su uno spotted che segui`
-      : `${nome} ha commentato uno spotted che segui`;
+      ? `${nome} ha messo like su ${riferimentoSpotted}`
+      : `${nome} ha commentato ${riferimentoSpotted}`;
 
   const corpoAdmin =
-    testo ||
-    (type === "like"
-      ? `${nome} ha lasciato un like`
-      : `Nuovo commento di ${nome}`);
+    type === "like"
+      ? `${nome} ha messo like su ${riferimentoSpotted}`
+      : testo
+        ? `${nome}: ${testo}`
+        : `${nome} ha commentato ${riferimentoSpotted}`;
 
   const profili =
     await recuperaProfiliUtenti({
@@ -3767,6 +3951,621 @@ if (
             error:
               errore.message ||
               "Errore durante l'invio della comunicazione di servizio."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Sblocco del link di una proposta gruppo.
+     *
+     * La chiama l'utente che ha appena dato il like decisivo: qui il
+     * service account conta i like, segna lo sblocco e avvisa tutti
+     * quelli che avevano messo like. Gli invii viaggiano a lotti per
+     * non superare le sotto-richieste del piano gratuito; il browser
+     * ripete la chiamata finche' hasMore resta true.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/notify-unlock"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        await verificaFirebaseIdToken(
+          idToken,
+          env
+        );
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const postId =
+          typeof corpo.postId === "string"
+            ? corpo.postId.trim()
+            : "";
+
+        const cursore =
+          typeof corpo.cursor === "string"
+            ? corpo.cursor.trim()
+            : "";
+
+        if (!postId) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "postId mancante."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(
+            serviceAccount
+          );
+
+        const documentoPost =
+          await leggiDocumentoConServiceAccount(
+            {
+              env,
+              accessToken,
+              percorso: `posts/${postId}`
+            }
+          );
+
+        if (!documentoPost) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Questo spotted non esiste più."
+            },
+            404,
+            origin,
+            env
+          );
+        }
+
+        const campiPost =
+          documentoPost.fields || {};
+
+        const requiredLikes = Math.max(
+          1,
+          Number(
+            valoreFirestore(
+              campiPost.requiredLikes
+            )
+          ) || 10
+        );
+
+        const testoPost = String(
+          valoreFirestore(campiPost.text) ||
+            ""
+        );
+
+        const likes =
+          await recuperaDocumentiPerCampo({
+            env,
+            accessToken,
+            collectionId: "likes",
+            campo: "postId",
+            valore: postId
+          });
+
+        if (likes.length < requiredLikes) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Il link si sblocca solo quando i like raggiungono l'obiettivo."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (
+          !valoreFirestore(
+            campiPost.unlockedAt
+          )
+        ) {
+          await aggiornaDocumentiInBlocco({
+            env,
+            accessToken,
+            documenti: [
+              {
+                name: documentoPost.name,
+                fields: {
+                  unlockedAt: {
+                    stringValue:
+                      new Date().toISOString()
+                  }
+                }
+              }
+            ]
+          });
+        }
+
+        const destinatari = Array.from(
+          new Set(
+            likes
+              .map((like) =>
+                valoreFirestore(
+                  like.fields.userId
+                )
+              )
+              .filter(
+                (uid) =>
+                  typeof uid === "string" &&
+                  uid !== ""
+              )
+          )
+        ).sort();
+
+        const LOTTO = 8;
+
+        const indiceCursore =
+          cursore > ""
+            ? destinatari.indexOf(cursore)
+            : -1;
+
+        const inizio = Math.max(
+          indiceCursore + 1,
+          0
+        );
+
+        const lotto = destinatari.slice(
+          inizio,
+          inizio + LOTTO
+        );
+
+        const titolo = "🎉 Gruppo sbloccato";
+
+        const anteprima = anteprimaTesto(
+          testoPost
+        );
+
+        const corpoNotifica = anteprima
+          ? `Il link di «${anteprima}» è disponibile.`
+          : "Il link del gruppo è disponibile.";
+
+        let notificati = 0;
+        let pushInviate = 0;
+        let pushFallite = 0;
+
+        for (const uid of lotto) {
+          const notificationId =
+            `unlock_${postId}_${uid}`;
+
+          try {
+            const notifica =
+              await creaNotificaInterna({
+                env,
+                accessToken,
+                userId: uid,
+                type: "unlock",
+                title: titolo,
+                body: corpoNotifica,
+                postId,
+                notificationId
+              });
+
+            if (!notifica) continue;
+
+            notificati += 1;
+
+            const push =
+              await inviaPushAUtente({
+                env,
+                accessToken,
+                recipientUserId: uid,
+                title: titolo,
+                body: corpoNotifica,
+                url: "/",
+                notificationId,
+                postId
+              });
+
+            pushInviate += push.sent;
+            pushFallite += push.failed;
+          } catch (errore) {
+            console.error(
+              "Notifica sblocco non inviata a",
+              uid,
+              errore
+            );
+          }
+        }
+
+        return rispostaJson(
+          {
+            success: true,
+            totaleDestinatari: destinatari.length,
+            notificati,
+            pushInviate,
+            pushFallite,
+            hasMore:
+              inizio + lotto.length <
+              destinatari.length,
+            nextCursor:
+              lotto[lotto.length - 1] || ""
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /notify-unlock:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante la notifica dello sblocco."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Approvazione del cambio nickname (solo admin).
+     *
+     * Il service account rinomina l'utente e tutte le sue attività
+     * (commenti e like) in un solo commit: dalle regole Firestore un
+     * admin non potrebbe riscrivere i documenti altrui, e una PATCH per
+     * documento esaurirebbe le sotto-richieste del piano gratuito.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/approve-nickname"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (
+          !utenteAmministratore(profilo)
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono approvare un cambio nickname."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const requestId =
+          typeof corpo.requestId === "string"
+            ? corpo.requestId.trim()
+            : "";
+
+        if (!requestId) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "requestId mancante."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(
+            serviceAccount
+          );
+
+        const richiesta =
+          await leggiDocumentoConServiceAccount(
+            {
+              env,
+              accessToken,
+              percorso:
+                `nicknameRequests/${requestId}`
+            }
+          );
+
+        if (!richiesta) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Richiesta di cambio nickname non trovata."
+            },
+            404,
+            origin,
+            env
+          );
+        }
+
+        const campiRichiesta =
+          richiesta.fields || {};
+
+        const userId = String(
+          valoreFirestore(
+            campiRichiesta.userId
+          ) || ""
+        );
+
+        const vecchioNickname = String(
+          valoreFirestore(
+            campiRichiesta.oldNickname
+          ) || ""
+        );
+
+        const nuovoNickname = String(
+          valoreFirestore(
+            campiRichiesta.newNickname
+          ) || ""
+        ).trim();
+
+        const stato = String(
+          valoreFirestore(
+            campiRichiesta.status
+          ) || ""
+        );
+
+        if (!userId || !nuovoNickname) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "La richiesta non contiene utente o nuovo nickname."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (stato !== "pending") {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Questa richiesta è già stata gestita."
+            },
+            409,
+            origin,
+            env
+          );
+        }
+
+        if (
+          nuovoNickname.length < 3 ||
+          nuovoNickname.length > 30
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Il nickname deve contenere da 3 a 30 caratteri."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const documentiDaRinominare =
+          vecchioNickname
+            ? [
+                ...(await recuperaDocumentiPerCampo({
+                  env,
+                  accessToken,
+                  collectionId: "comments",
+                  campo: "nickname",
+                  valore: vecchioNickname
+                })),
+                ...(await recuperaDocumentiPerCampo({
+                  env,
+                  accessToken,
+                  collectionId: "likes",
+                  campo: "nickname",
+                  valore: vecchioNickname
+                }))
+              ]
+            : [];
+
+        if (documentiDaRinominare.length > 0) {
+          await aggiornaDocumentiInBlocco({
+            env,
+            accessToken,
+            documenti:
+              documentiDaRinominare.map(
+                (documento) => ({
+                  name: documento.name,
+                  fields: {
+                    nickname: {
+                      stringValue:
+                        nuovoNickname
+                    }
+                  }
+                })
+              )
+          });
+        }
+
+        const utente =
+          await leggiDocumentoConServiceAccount(
+            {
+              env,
+              accessToken,
+              percorso: `users/${userId}`
+            }
+          );
+
+        const daAggiornare = [
+          {
+            name: richiesta.name,
+            fields: {
+              status: {
+                stringValue: "approved"
+              },
+              reviewedAt: {
+                stringValue:
+                  new Date().toISOString()
+              },
+              reviewedBy: {
+                stringValue: identita.uid
+              }
+            }
+          }
+        ];
+
+        if (utente) {
+          daAggiornare.push({
+            name: utente.name,
+            fields: {
+              nickname: {
+                stringValue: nuovoNickname
+              }
+            }
+          });
+        }
+
+        await aggiornaDocumentiInBlocco({
+          env,
+          accessToken,
+          documenti: daAggiornare
+        });
+
+        /*
+         * L'utente vede subito l'esito: notifica interna + push.
+         */
+        const notificationId =
+          `nickname_${requestId}`;
+
+        const notifica =
+          await creaNotificaInterna({
+            env,
+            accessToken,
+            userId,
+            type: "nickname",
+            title: "✅ Nickname aggiornato",
+            body:
+              `Il tuo nuovo nickname è «${nuovoNickname}».`,
+            postId: null,
+            notificationId
+          });
+
+        if (notifica) {
+          await inviaPushAUtente({
+            env,
+            accessToken,
+            recipientUserId: userId,
+            title: "✅ Nickname aggiornato",
+            body:
+              `Il tuo nuovo nickname è «${nuovoNickname}».`,
+            url: "/",
+            notificationId,
+            postId: ""
+          }).catch((errore) => {
+            console.warn(
+              "Nickname aggiornato, push non inviata:",
+              errore
+            );
+          });
+        }
+
+        return rispostaJson(
+          {
+            success: true,
+            userId,
+            nickname: nuovoNickname,
+            attivitaAggiornate:
+              documentiDaRinominare.length
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /approve-nickname:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante il cambio nickname."
           },
           500,
           origin,

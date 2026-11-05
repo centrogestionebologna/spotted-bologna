@@ -1199,3 +1199,85 @@ details summary {
   font-size: 12px;
   line-height: 1;
 }
+
+/* Riga del nickname nel profilo con il pulsante “modifica”. */
+.profile-nickname-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.nickname-edit-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid #f5c542;
+  background: transparent;
+  color: #f5c542;
+}
+
+.nickname-edit-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.nickname-edit-box p {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.nickname-request-pending {
+  color: #f5c542;
+  font-size: 13px;
+}
+
+.nickname-request-message {
+  font-size: 13px;
+}
+
+.nickname-request {
+  border-color: rgba(245, 197, 66, 0.55);
+}
+
+/* Notifiche cliccabili e “Mostra altre notifiche”. */
+.notification-clickable {
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.notification-clickable:hover {
+  border-color: #f5c542;
+  background: #1a1710;
+}
+
+.notification-open-hint {
+  color: #f5c542;
+}
+
+.notifications-show-more {
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* Spotted aperto da una notifica: lampeggia un attimo per farlo notare. */
+.post-evidenziato {
+  border: 2px solid #f5c542 !important;
+  box-shadow: 0 0 20px rgba(245, 197, 66, 0.75) !important;
+  animation: spotted-evidenziato 1.2s ease-in-out 3;
+}
+
+@keyframes spotted-evidenziato {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(245, 197, 66, 0.75);
+  }
+
+  50% {
+    box-shadow: 0 0 4px rgba(245, 197, 66, 0.15);
+  }
+}

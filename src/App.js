@@ -35,7 +35,9 @@ import {
   aggiornaConteggioIscrittiServer,
   notificaAttivitaPost,
   notificaAmministratoriServer,
-  notificaComunicazioneServizio
+  notificaComunicazioneServizio,
+  notificaSbloccoGruppo,
+  approvaCambioNickname
 } from "./services/pushSender";
 
 import {
@@ -343,6 +345,30 @@ const [
   progressoComunicazione,
   setProgressoComunicazione
 ] = useState("");
+
+/*
+ * Spotted da aprire da una notifica (link ?spotted=<id> o messaggio del
+ * service worker): serve a scorrere fino alla card giusta invece di
+ * lasciare l'utente in cima alla home.
+ */
+const [spottedDaAprire, setSpottedDaAprire] =
+  useState("");
+
+/*
+ * Cambio nickname: la richiesta in attesa dell'utente, l'elenco che vede
+ * l'admin e lo stato del pulsante di invio.
+ */
+const [richiestaNickname, setRichiestaNickname] =
+  useState(null);
+
+const [richiesteNickname, setRichiesteNickname] =
+  useState([]);
+
+const [
+  richiestaNicknameInCorso,
+  setRichiestaNicknameInCorso
+] = useState(false);
+
 const conteggioUtentiSincronizzatoRef = useRef(null);
 const sincronizzazioneConteggioUtentiRef = useRef(Promise.resolve());
 const pendingNotificheInCorsoRef = useRef(new Set());
@@ -1676,8 +1702,10 @@ const rifiutaPost = async (id) => {
   caricaCommenti();
   caricaLike();
 
-};
-
+};/*
+ * Il campo si svuota subito e il commento si salva dopo: aspettare
+ * lettura del profilo e notifica rendeva il pulsante lento.
+ */
 const inviaCommento = async (postId) => {
 
   const testo =
@@ -1687,53 +1715,77 @@ const inviaCommento = async (postId) => {
     return;
   }
 
-  const userDoc = await getDoc(
-    doc(db, "users", user.uid)
-  );
+  setCommentInputs((correnti) => ({
+    ...correnti,
+    [postId]: ""
+  }));
 
-  const nicknameUtente =
-    userDoc.data().nickname;
+  try {
+    let nicknameUtente = savedNickname;
 
-  const commentoRef = await addDoc(
-    collection(db, "comments"),
-    {
-      postId: postId,
-      userId: user.uid,
-      nickname: nicknameUtente,
-      text: testo,
-      createdAt: new Date().toISOString()
+    if (!nicknameUtente) {
+      const userDoc = await getDoc(
+        doc(db, "users", user.uid)
+      );
+
+      nicknameUtente =
+        userDoc.data()?.nickname || "";
     }
-  );
 
-/*
- * Le notifiche le manda il Worker: il browser di chi commenta non puo'
- * leggere i profili degli altri utenti (le regole Firestore lo vietano)
- * e quindi non sa chi segue lo spotted ne' chi ha attivo l'avviso per
- * i commenti. L'ID del commento rende la notifica unica.
- */
-try {
-  await notificaAttivitaPost({
-    type: "comment",
-    postId,
-    eventId: commentoRef.id,
-    testo
-  });
-} catch (erroreNotifica) {
-  console.warn(
-    "Commento salvato, notifica non inviata:",
-    erroreNotifica
-  );
-}
+    const commentoRef = await addDoc(
+      collection(db, "comments"),
+      {
 
-  setCommentInputs({
-  ...commentInputs,
-  [postId]: ""
-});
+        postId: postId,
+        userId: user.uid,
+        nickname: nicknameUtente,
+        text: testo,
+        createdAt: new Date().toISOString()
+      }
+    );
 
+    /*
+     * Le notifiche le manda il Worker: il browser di chi commenta non
+     * puo' leggere i profili degli altri utenti (le regole Firestore lo
+     * vietano) e quindi non sa chi segue lo spotted ne' chi ha attivo
+     * l'avviso per i commenti. L'ID del commento rende la notifica unica.
+     */
+    notificaAttivitaPost({
+      type: "comment",
+      postId,
+      eventId: commentoRef.id,
+      testo
+    }).catch((erroreNotifica) => {
+      console.warn(
+        "Commento salvato, notifica non inviata:",
+        erroreNotifica
+      );
+    });
 
-  caricaCommenti();
+    caricaCommenti();
+  } catch (errore) {
+    console.error(
+      "Commento non inviato:",
+      errore
+    );
+
+    setCommentInputs((correnti) => ({
+      ...correnti,
+      [postId]: testo
+    }));
+
+    alert(
+      "Non è stato possibile inviare il commento. Riprova."
+    );
+  }
 };
 
+/*
+ * Like immediato: lo stato locale cambia subito (il cuore si accende
+ * senza aspettare il server), poi il salvataggio, la notifica e
+ * l'eventuale sblocco della proposta gruppo avvengono in background.
+ * Se il salvataggio fallisce lo stato locale torna indietro.
+ */
 const toggleLike = async (postId) => {
 
   if (!user) return;
@@ -1746,130 +1798,225 @@ const toggleLike = async (postId) => {
 
   if (likeEsistente) {
 
-    await deleteDoc(
+    setLikes((correnti) =>
+      correnti.filter(
+        (like) => like.id !== likeEsistente.id
+      )
+    );
+
+    deleteDoc(
       doc(db, "likes", likeEsistente.id)
-    );
+    )
+      .then(() => {
+        /* Riallineamento silenzioso: il cuore non aspetta questa lettura. */
+        caricaLike();
+      })
+      .catch((errore) => {
+        console.error(
+          "Like non rimosso:",
+          errore
+        );
 
-  } else {
+        setLikes((correnti) =>
+          correnti.some(
+            (like) => like.id === likeEsistente.id
+          )
+            ? correnti
+            : [...correnti, likeEsistente]
+        );
+      });
 
-    const userDoc = await getDoc(
-      doc(db, "users", user.uid)
-    );
+    return;
+  }
 
+  const likeTemporaneo = {
+    id: `temp-like-${user.uid}-${postId}-${Date.now()}`,
+    postId,
+    userId: user.uid,
+    nickname: savedNickname || ""
+  };
+
+  setLikes((correnti) => [
+    ...correnti,
+    likeTemporaneo
+  ]);
+
+  try {
     const likeRef = await addDoc(
       collection(db, "likes"),
       {
         postId: postId,
         userId: user.uid,
-        nickname: userDoc.data().nickname
+        nickname: savedNickname || ""
       }
     );
 
-/*
- * Come per i commenti: seguaci e preferenze le legge il Worker, e
- * l'ID del like impedisce che la stessa notifica parta due volte.
- */
-try {
-  await notificaAttivitaPost({
-    type: "like",
-    postId,
-    eventId: likeRef.id
-  });
-} catch (erroreNotifica) {
-  console.warn(
-    "Like salvato, notifica non inviata:",
-    erroreNotifica
-  );
-}
-
-  }
-
- caricaLike();
-
-const postDaControllare =
-  posts.find(
-    (p) => p.id === postId
-  );
-
-if (
-  postDaControllare &&
-  postDaControllare.type ===
-    "groupProposal"
-) {
-
-  const nuoviLike = await getDocs(
-    collection(db, "likes")
-  );
-
-  const totaleLike =
-    nuoviLike.docs.filter(
-      (docu) =>
-        docu.data().postId === postId
-    ).length;
-
-  if (
-    totaleLike >=
-      postDaControllare.requiredLikes &&
-    !postDaControllare.unlockedAt
-  ) {
-
-    await updateDoc(
-      doc(db, "posts", postId),
-      {
-        unlockedAt:
-          new Date().toISOString()
-      }
+    setLikes((correnti) =>
+      correnti.map((like) =>
+        like.id === likeTemporaneo.id
+          ? { ...like, id: likeRef.id }
+          : like
+      )
     );
 
-    caricaPost();
+    /* Riallineamento silenzioso con gli altri like nel frattempo. */
+    caricaLike();
 
+    /*
+     * Come per i commenti: seguaci e preferenze le legge il Worker, e
+     * l'ID del like impedisce che la stessa notifica parta due volte.
+     */
+    notificaAttivitaPost({
+      type: "like",
+      postId,
+      eventId: likeRef.id
+    }).catch((erroreNotifica) => {
+      console.warn(
+        "Like salvato, notifica non inviata:",
+        erroreNotifica
+      );
+    });
+
+    const postDaControllare = posts.find(
+      (p) => p.id === postId
+    );
+
+    if (
+      postDaControllare &&
+      postDaControllare.type ===
+        "groupProposal" &&
+      !postDaControllare.unlockedAt
+    ) {
+      const totaleLike =
+        likes.filter(
+          (like) => like.postId === postId
+        ).length + 1;
+
+      const obiettivo = Math.max(
+        1,
+        Number(
+          postDaControllare.requiredLikes
+        ) || 10
+      );
+
+      if (totaleLike >= obiettivo) {
+        sbloccaPropostaGruppo(postId);
+      }
+    }
+  } catch (errore) {
+    console.error(
+      "Like non salvato:",
+      errore
+    );
+
+    setLikes((correnti) =>
+      correnti.filter(
+        (like) => like.id !== likeTemporaneo.id
+      )
+    );
+
+    alert(
+      "Non è stato possibile registrare il like. Riprova."
+    );
   }
-
-}
 
 };
 
+/*
+ * Come per il like: il campanello cambia subito e il salvataggio avviene
+ * dopo, con ripristino dello stato se Firestore rifiuta.
+ */
 const toggleFollowPost = async (
   postId
 ) => {
   if (!user || followRequestInProgress[postId]) return;
 
-  setFollowRequestInProgress((current) => ({ ...current, [postId]: true }));
-  try {
-    const esistente = postFollowers.find(
-      (follower) =>
-        follower.postId === postId &&
-        follower.userId === user.uid
+  setFollowRequestInProgress((current) => ({
+    ...current,
+    [postId]: true
+  }));
+
+  const esistente = postFollowers.find(
+    (follower) =>
+      follower.postId === postId &&
+      follower.userId === user.uid
+  );
+
+  if (esistente) {
+    setPostFollowers((current) =>
+      current.filter(
+        (follower) => follower.id !== esistente.id
+      )
     );
 
-    if (esistente) {
-      await deleteDoc(doc(db, "postFollowers", esistente.id));
+    deleteDoc(
+      doc(db, "postFollowers", esistente.id)
+    ).catch((errore) => {
+      console.error(
+        "Follow non rimosso:",
+        errore
+      );
+
       setPostFollowers((current) =>
-        current.filter(
-          (follower) =>
-            follower.postId !== postId || follower.userId !== user.uid
+        current.some(
+          (follower) => follower.id === esistente.id
         )
+          ? current
+          : [...current, esistente]
       );
-    } else {
-      const followerRef = await addDoc(
-        collection(db, "postFollowers"),
-        {
-          postId,
-          userId: user.uid,
-          createdAt: new Date().toISOString()
-        }
-      );
-      setPostFollowers((current) => [
-        ...current,
-        { id: followerRef.id, postId, userId: user.uid }
-      ]);
-    }
-  } finally {
-    setFollowRequestInProgress((current) => ({
+    });
+  } else {
+    const followerTemporaneo = {
+      id: `temp-follow-${user.uid}-${postId}-${Date.now()}`,
+      postId,
+      userId: user.uid
+    };
+
+    setPostFollowers((current) => [
       ...current,
-      [postId]: false
-    }));
+      followerTemporaneo
+    ]);
+
+    addDoc(
+      collection(db, "postFollowers"),
+      {
+        postId,
+        userId: user.uid,
+        createdAt: new Date().toISOString()
+      }
+    )
+      .then((followerRef) => {
+        setPostFollowers((current) =>
+          current.map((follower) =>
+            follower.id === followerTemporaneo.id
+              ? {
+                  id: followerRef.id,
+                  postId,
+                  userId: user.uid
+                }
+              : follower
+          )
+        );
+      })
+      .catch((errore) => {
+        console.error(
+          "Follow non salvato:",
+          errore
+        );
+
+        setPostFollowers((current) =>
+          current.filter(
+            (follower) =>
+              follower.id !== followerTemporaneo.id
+          )
+        );
+      });
   }
+
+  setFollowRequestInProgress((current) => ({
+    ...current,
+    [postId]: false
+  }));
 };
 
 const segnalaPost = async (postId) => {
@@ -2488,6 +2635,119 @@ useEffect(() => {
   return () => unsubscribe();
 }, []);
 
+/*
+ * Richiesta di cambio nickname dell'utente collegato.
+ *
+ * Quando l'admin l'approva il Worker rinomina anche commenti e like: qui
+ * basta allineare il nickname mostrato, così l'utente lo vede subito
+ * senza dover uscire e rientrare.
+ */
+useEffect(() => {
+  if (!user) {
+    setRichiestaNickname(null);
+    return undefined;
+  }
+
+  const richiesteQuery = query(
+    collection(db, "nicknameRequests"),
+    where("userId", "==", user.uid)
+  );
+
+  const unsubscribe = onSnapshot(
+    richiesteQuery,
+    (snapshot) => {
+      const lista = snapshot.docs.map((docu) => ({
+        id: docu.id,
+        ...docu.data()
+      }));
+
+      lista.sort(
+        (a, b) =>
+          new Date(b.createdAt || 0) -
+          new Date(a.createdAt || 0)
+      );
+
+      setRichiestaNickname(
+        lista.find(
+          (richiesta) =>
+            richiesta.status === "pending"
+        ) || null
+      );
+
+      const approvata = lista.find(
+        (richiesta) =>
+          richiesta.status === "approved"
+      );
+
+      if (
+        approvata?.newNickname &&
+        approvata.newNickname !==
+          approvata.oldNickname
+      ) {
+        setSavedNickname((corrente) =>
+          corrente === approvata.newNickname
+            ? corrente
+            : approvata.newNickname
+        );
+        setNickname((corrente) =>
+          corrente === approvata.newNickname
+            ? corrente
+            : approvata.newNickname
+        );
+      }
+    },
+    (errore) => {
+      console.error(
+        "Errore listener richieste nickname:",
+        errore
+      );
+    }
+  );
+
+  return () => unsubscribe();
+}, [user]);
+
+/*
+ * Elenco delle richieste da approvare: lo vede solo l'admin.
+ */
+useEffect(() => {
+  if (!isAdmin) {
+    setRichiesteNickname([]);
+    return undefined;
+  }
+
+  const unsubscribe = onSnapshot(
+    collection(db, "nicknameRequests"),
+    (snapshot) => {
+      const lista = snapshot.docs
+        .map((docu) => ({
+          id: docu.id,
+          ...docu.data()
+        }))
+        .filter(
+          (richiesta) =>
+            richiesta.status === "pending"
+        );
+
+      lista.sort(
+        (a, b) =>
+          new Date(b.createdAt || 0) -
+          new Date(a.createdAt || 0)
+      );
+
+      setRichiesteNickname(lista);
+    },
+    (errore) => {
+      console.error(
+        "Errore listener richieste nickname admin:",
+        errore
+      );
+    }
+  );
+
+  return () => unsubscribe();
+}, [isAdmin]);
+
 const nonLette =
   notifications.filter(
     (n) => !n.read
@@ -2496,11 +2756,13 @@ const nonLette =
 const markAllNotificationsRead =
 async () => {
 
-  for (const n of notifications) {
+  const daSegnare = notifications.filter(
+    (n) => !n.read
+  );
 
-    if (!n.read) {
-
-      await updateDoc(
+  await Promise.all(
+    daSegnare.map((n) =>
+      updateDoc(
         doc(
           db,
           "notifications",
@@ -2509,10 +2771,295 @@ async () => {
         {
           read: true
         }
+      ).catch((errore) => {
+        console.error(
+          "Notifica non segnata come letta:",
+          n.id,
+          errore
+        );
+      })
+    )
+  );
+};
+
+/*
+ * Apre uno spotted chiesto da una notifica: toglie la ricerca admin (che
+ * altrimenti filtrerebbe la card), poi l'effect qui sotto scorre fino
+ * ad essa e la evidenzia.
+ */
+const apriSpotted = (postId) => {
+  if (!postId) return;
+
+  setRicercaSpotted("");
+  setSpottedDaAprire(String(postId));
+};
+
+/*
+ * Link ?spotted=<id>: le push lo mettono nell'URL, cosi' il clic sulla
+ * notifica apre l'app gia' sullo spotted giusto.
+ */
+useEffect(() => {
+  const parametri = new URLSearchParams(
+    window.location.search
+  );
+
+  const spottedDaUrl = parametri.get("spotted");
+
+  if (spottedDaUrl) {
+    setSpottedDaAprire(spottedDaUrl);
+  }
+}, []);
+
+/*
+ * Scorre fino allo spotted richiesto. Se e' oltre “Mostra altri spotted”
+ * allarga prima l'elenco, altrimenti la card non esisterebbe nel DOM.
+ */
+useEffect(() => {
+  if (!spottedDaAprire || posts.length === 0) {
+    return undefined;
+  }
+
+  const indice = posts.findIndex(
+    (post) => post.id === spottedDaAprire
+  );
+
+  if (indice === -1) {
+    return undefined;
+  }
+
+  if (indice + 1 > postVisibili) {
+    setPostVisibili(indice + 1);
+    return undefined;
+  }
+
+  const timeout = setTimeout(() => {
+    const elemento = document.getElementById(
+      `post-${spottedDaAprire}`
+    );
+
+    if (!elemento) return;
+
+    elemento.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+
+    elemento.classList.add(
+      "post-evidenziato"
+    );
+
+    setTimeout(() => {
+      elemento.classList.remove(
+        "post-evidenziato"
+      );
+    }, 4000);
+
+    setSpottedDaAprire("");
+
+    if (window.history.replaceState) {
+      window.history.replaceState(
+        {},
+        "",
+        window.location.pathname
+      );
+    }
+  }, 150);
+
+  return () => clearTimeout(timeout);
+}, [spottedDaAprire, posts, postVisibili]);
+
+/*
+ * Sblocco di una proposta gruppo: segna lo sblocco e chiede al Worker di
+ * avvisare tutti quelli che avevano messo like. Gli invii vanno a lotti,
+ * quindi si ripete finche' il Worker dice che ce ne sono altri.
+ */
+const sbloccaPropostaGruppo = async (postId) => {
+  try {
+    await updateDoc(
+      doc(db, "posts", postId),
+      {
+        unlockedAt: new Date().toISOString()
+      }
+    );
+
+    caricaPost();
+  } catch (errore) {
+    console.error(
+      "Sblocco del gruppo non salvato:",
+      errore
+    );
+
+    return;
+  }
+
+  let cursore = "";
+
+  for (let giro = 0; giro < 40; giro += 1) {
+    let risultato = null;
+
+    try {
+      risultato = await notificaSbloccoGruppo({
+        postId,
+        cursor: cursore
+      });
+    } catch (errore) {
+      console.warn(
+        "Notifica di sblocco non inviata:",
+        errore
       );
 
+      return;
     }
 
+    if (!risultato?.hasMore) return;
+
+    cursore = risultato.nextCursor || "";
+
+    if (!cursore) return;
+  }
+};
+
+/*
+ * L'utente chiede il cambio nickname: non viene applicato subito, deve
+ * approvarlo un admin.
+ */
+const richiediCambioNickname = async (
+  nuovoNickname
+) => {
+  if (!user) {
+    return {
+      error: "Devi effettuare l'accesso."
+    };
+  }
+
+  if (richiestaNickname) {
+    return {
+      error:
+        "Hai già una richiesta in attesa di approvazione."
+    };
+  }
+
+  const pulito = String(
+    nuovoNickname || ""
+  ).trim();
+
+  if (pulito.length < 3) {
+    return {
+      error:
+        "Il nickname deve contenere almeno 3 caratteri."
+    };
+  }
+
+  if (pulito.length > 30) {
+    return {
+      error:
+        "Il nickname può contenere massimo 30 caratteri."
+    };
+  }
+
+  if (pulito === savedNickname) {
+    return {
+      error: "È già il tuo nickname."
+    };
+  }
+
+  setRichiestaNicknameInCorso(true);
+
+  try {
+    await addDoc(
+      collection(db, "nicknameRequests"),
+      {
+        userId: user.uid,
+        oldNickname: savedNickname || "",
+        newNickname: pulito,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        reviewedAt: null,
+        reviewedBy: null
+      }
+    );
+
+    return { success: true };
+  } catch (errore) {
+    console.error(
+      "Richiesta cambio nickname non inviata:",
+      errore
+    );
+
+    return {
+      error:
+        "Non è stato possibile inviare la richiesta. Riprova."
+    };
+  } finally {
+    setRichiestaNicknameInCorso(false);
+  }
+};
+
+const approvaRichiestaNickname = async (
+  richiesta
+) => {
+  if (!isAdmin || !richiesta) return;
+
+  if (
+    !window.confirm(
+      `Approvare il cambio da «${richiesta.oldNickname}» a «${richiesta.newNickname}»?`
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const risultato = await approvaCambioNickname({
+      requestId: richiesta.id
+    });
+
+    if (
+      richiesta.userId === user?.uid &&
+      risultato?.nickname
+    ) {
+      setNickname(risultato.nickname);
+      setSavedNickname(risultato.nickname);
+    }
+
+    alert(
+      `Nickname aggiornato. Attività rinominate: ${risultato?.attivitaAggiornate || 0}.`
+    );
+  } catch (errore) {
+    console.error(
+      "Cambio nickname non approvato:",
+      errore
+    );
+
+    alert(
+      errore.message ||
+        "Non è stato possibile approvare il cambio nickname."
+    );
+  }
+};
+
+const rifiutaRichiestaNickname = async (
+  richiesta
+) => {
+  if (!isAdmin || !richiesta) return;
+
+  try {
+    await updateDoc(
+      doc(db, "nicknameRequests", richiesta.id),
+      {
+        status: "rejected",
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: user?.uid || null
+      }
+    );
+  } catch (errore) {
+    console.error(
+      "Richiesta nickname non rifiutata:",
+      errore
+    );
+
+    alert(
+      "Non è stato possibile rifiutare la richiesta."
+    );
   }
 };
 
@@ -2681,6 +3228,12 @@ return (
       notifications={notifications}
       nonLette={nonLette}
       markAllNotificationsRead={markAllNotificationsRead}
+      apriSpotted={apriSpotted}
+      richiestaNickname={richiestaNickname}
+      richiediCambioNickname={richiediCambioNickname}
+      richiestaNicknameInCorso={
+        richiestaNicknameInCorso
+      }
     />
 
   </>
@@ -2966,6 +3519,74 @@ return (
 
 {user && savedNickname && isAdmin && (
   <>
+
+<details className="admin-dashboard">
+
+<summary
+  style={{
+    cursor: "pointer",
+    fontSize: "22px",
+    fontWeight: "bold",
+    marginBottom: "15px"
+  }}
+>
+  ✏️ Richieste cambio nickname ({richiesteNickname.length})
+</summary>
+
+<div className="section-card">
+
+{richiesteNickname.length === 0 && (
+  <p>Nessuna richiesta in attesa.</p>
+)}
+
+{richiesteNickname.map((richiesta) => (
+  <div
+    key={richiesta.id}
+    className="user-card nickname-request"
+  >
+    <p>
+      <strong>Da:</strong>{" "}
+      {richiesta.oldNickname || "(vuoto)"}
+    </p>
+
+    <p>
+      <strong>A:</strong>{" "}
+      {richiesta.newNickname}
+    </p>
+
+    <p>
+      <strong>Richiesta il:</strong>{" "}
+      {richiesta.createdAt
+        ? new Date(
+            richiesta.createdAt
+          ).toLocaleString("it-IT")
+        : "-"}
+    </p>
+
+    <button
+      onClick={() =>
+        approvaRichiestaNickname(richiesta)
+      }
+    >
+      ✅ Approva
+    </button>
+
+    <button
+      onClick={() =>
+        rifiutaRichiestaNickname(richiesta)
+      }
+      style={{
+        marginLeft: "10px"
+      }}
+    >
+      ❌ Rifiuta
+    </button>
+  </div>
+))}
+
+</div>
+
+</details>
 
 <details className="admin-dashboard">
 

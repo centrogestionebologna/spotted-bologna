@@ -38,11 +38,78 @@ function ProfileCard({
 
   markAllNotificationsRead,
 
-  isAdmin
+  isAdmin,
+
+  apriSpotted,
+  richiestaNickname,
+  richiediCambioNickname,
+  richiestaNicknameInCorso
 }) {
 
 const [attivazionePush, setAttivazionePush] =
   useState(false);
+
+/*
+ * Cambio nickname: la casella di inserimento resta chiusa finche'
+ * l'utente non tocca “modifica”.
+ */
+const [mostraCambioNickname, setMostraCambioNickname] =
+  useState(false);
+
+const [nuovoNickname, setNuovoNickname] =
+  useState("");
+
+const [messaggioCambioNickname, setMessaggioCambioNickname] =
+  useState("");
+
+const inviaRichiestaCambio = async () => {
+  setMessaggioCambioNickname("");
+
+  const risultato =
+    await richiediCambioNickname(
+      nuovoNickname
+    );
+
+  if (risultato?.error) {
+    setMessaggioCambioNickname(
+      `❌ ${risultato.error}`
+    );
+    return;
+  }
+
+  setMessaggioCambioNickname("");
+  setMostraCambioNickname(false);
+};
+
+/*
+ * Le notifiche non lette si vedono sempre tutte; delle lette restano
+ * visibili le tre piu' recenti e “Mostra altre notifiche” apre le
+ * successive, che sono le piu' vecchie.
+ */
+const LIMITE_LETTE_INIZIALE = 3;
+const PASSO_LETTE = 5;
+
+const [letteVisibili, setLetteVisibili] =
+  useState(LIMITE_LETTE_INIZIALE);
+
+let letteMostrate = 0;
+
+const notificheVisibili = notifications.filter(
+  (notifica) => {
+    if (!notifica.read) return true;
+
+    if (letteMostrate >= letteVisibili) {
+      return false;
+    }
+
+    letteMostrate += 1;
+    return true;
+  }
+);
+
+const notificheNascoste =
+  notifications.length -
+  notificheVisibili.length;
 
 const supportoPush = infoSupportoPush();
 
@@ -82,9 +149,100 @@ const gestisciAttivazionePush = async () => {
 
       <h2>PROFILO</h2>
 
-      <p>
-        <strong>Nickname:</strong> {nickname}
+      <p className="profile-nickname-row">
+        <span>
+          <strong>Nickname:</strong> {nickname}
+        </span>
+
+        {!mostraCambioNickname &&
+          !richiestaNickname && (
+            <button
+              type="button"
+              className="nickname-edit-btn"
+              onClick={() => {
+                setNuovoNickname(nickname);
+                setMessaggioCambioNickname("");
+                setMostraCambioNickname(true);
+              }}
+            >
+              modifica
+            </button>
+          )}
       </p>
+
+      {richiestaNickname && (
+        <p className="nickname-request-pending">
+          ⏳ Richiesta in attesa:{" "}
+          <strong>
+            {richiestaNickname.newNickname}
+          </strong>
+          . Serve l'approvazione di un admin.
+        </p>
+      )}
+
+      {mostraCambioNickname &&
+        !richiestaNickname && (
+          <div className="nickname-edit-box">
+            <input
+              type="text"
+              value={nuovoNickname}
+              maxLength={30}
+              placeholder="Nuovo nickname"
+              onChange={(e) =>
+                setNuovoNickname(
+                  e.target.value
+                )
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  inviaRichiestaCambio();
+                }
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={inviaRichiestaCambio}
+              disabled={
+                richiestaNicknameInCorso
+              }
+            >
+              {richiestaNicknameInCorso
+                ? "Invio..."
+                : "Invia richiesta"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setMostraCambioNickname(
+                  false
+                )
+              }
+            >
+              Annulla
+            </button>
+
+            <p
+              style={{
+                fontSize: "12px",
+                color: "#999",
+                marginTop: "6px"
+              }}
+            >
+              Il nuovo nickname deve
+              essere approvato da un
+              admin: fino ad allora resta
+              quello attuale.
+            </p>
+          </div>
+        )}
+
+      {messaggioCambioNickname && (
+        <p className="nickname-request-message">
+          {messaggioCambioNickname}
+        </p>
+      )}
 
       <p>
         <strong>Iscritti:</strong> {iscritti}
@@ -332,7 +490,7 @@ const gestisciAttivazionePush = async () => {
               <p>Nessuna notifica</p>
             )}
 
-            {notifications.map(
+            {notificheVisibili.map(
               (notifica) => (
                 <div
                   key={notifica.id}
@@ -340,7 +498,27 @@ const gestisciAttivazionePush = async () => {
                     !notifica.read
                       ? "notification-unread"
                       : ""
+                  } ${
+                    notifica.postId
+                      ? "notification-clickable"
+                      : ""
                   }`}
+                  onClick={() => {
+                    if (
+                      notifica.postId &&
+                      typeof apriSpotted ===
+                        "function"
+                    ) {
+                      apriSpotted(
+                        notifica.postId
+                      );
+                    }
+                  }}
+                  title={
+                    notifica.postId
+                      ? "Vai allo spotted"
+                      : undefined
+                  }
                 >
 
                   <strong>
@@ -357,10 +535,33 @@ const gestisciAttivazionePush = async () => {
                     ).toLocaleString(
                       "it-IT"
                     )}
+
+                    {notifica.postId && (
+                      <span className="notification-open-hint">
+                        {" "}
+                        · ➜ vedi spotted
+                      </span>
+                    )}
                   </small>
 
                 </div>
               )
+            )}
+
+            {notificheNascoste > 0 && (
+              <button
+                type="button"
+                className="notifications-show-more"
+                onClick={() =>
+                  setLetteVisibili(
+                    (correnti) =>
+                      correnti + PASSO_LETTE
+                  )
+                }
+              >
+                Mostra altre notifiche (
+                {notificheNascoste})
+              </button>
             )}
 
           </div>
