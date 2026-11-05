@@ -34,7 +34,8 @@ import {
   inviaPushAUtente,
   aggiornaConteggioIscrittiServer,
   notificaAttivitaPost,
-  notificaAmministratoriServer
+  notificaAmministratoriServer,
+  notificaComunicazioneServizio
 } from "./services/pushSender";
 
 import {
@@ -317,6 +318,31 @@ const [
   unreadNotifications,
   setUnreadNotifications
 ] = useState(0);
+
+const [
+  comunicazioniServizio,
+  setComunicazioniServizio
+] = useState([]);
+
+const [
+  mostraComunicazioneServizio,
+  setMostraComunicazioneServizio
+] = useState(false);
+
+const [
+  testoComunicazione,
+  setTestoComunicazione
+] = useState("");
+
+const [
+  invioComunicazioneInCorso,
+  setInvioComunicazioneInCorso
+] = useState(false);
+
+const [
+  progressoComunicazione,
+  setProgressoComunicazione
+] = useState("");
 const conteggioUtentiSincronizzatoRef = useRef(null);
 const sincronizzazioneConteggioUtentiRef = useRef(Promise.resolve());
 const pendingNotificheInCorsoRef = useRef(new Set());
@@ -1226,6 +1252,184 @@ const inviaSpotted = async () => {
 
     alert(
       "Non è stato possibile inviare lo spotted. Riprova."
+    );
+  }
+};
+
+/*
+ * Pubblica una comunicazione di servizio e la notifica subito a tutti
+ * gli iscritti. Le notifiche le crea il Worker (service account),
+ * perche' le regole Firestore impediscono al browser di scrivere
+ * quelle degli altri utenti.
+ */
+const inviaComunicazioneServizio = async () => {
+  if (!isAdmin) {
+    alert(
+      "Solo gli amministratori possono pubblicare una comunicazione di servizio."
+    );
+    return;
+  }
+
+  const testo =
+    testoComunicazione.trim();
+
+  if (!testo) {
+    alert("Scrivi il testo della comunicazione.");
+    return;
+  }
+
+  if (testo.length > 500) {
+    alert("Massimo 500 caratteri.");
+    return;
+  }
+
+  setInvioComunicazioneInCorso(true);
+  setProgressoComunicazione("");
+
+  try {
+    const comunicazioneRef = await addDoc(
+      collection(db, "serviceNotices"),
+      {
+        text: testo,
+        authorId: user?.uid || "",
+        authorName: savedNickname || "",
+        createdAt: new Date().toISOString()
+      }
+    );
+
+    setTestoComunicazione("");
+    setMostraComunicazioneServizio(false);
+
+    /*
+     * Normalmente l'elenco arriva dal listener degli utenti; se non e'
+     * ancora stato caricato lo leggiamo adesso, altrimenti la
+     * comunicazione resterebbe pubblicata ma senza notifiche.
+     */
+    let elencoIscritti = utenti;
+
+    if (elencoIscritti.length === 0) {
+      const snapshotIscritti =
+        await getDocs(
+          collection(db, "users")
+        );
+
+      elencoIscritti =
+        snapshotIscritti.docs.map(
+          (docu) => ({
+            id: docu.id,
+            ...docu.data()
+          })
+        );
+    }
+
+    const destinatari = elencoIscritti.filter(
+      (iscritto) =>
+        iscritto?.id && !iscritto.banned
+    );
+
+    let notificati = 0;
+    let falliti = 0;
+    let dispositivi = 0;
+
+    const coda = [...destinatari];
+
+    /*
+     * Quattro invii in parallelo: abbastanza per finire presto senza
+     * aprire decine di richieste contemporanee al Worker.
+     */
+    const inviaSuccessivo = async () => {
+      while (coda.length > 0) {
+        const destinatario = coda.shift();
+
+        try {
+          const risultato =
+            await notificaComunicazioneServizio({
+              noticeId: comunicazioneRef.id,
+              text: testo,
+              recipientUserId: destinatario.id
+            });
+
+          notificati += 1;
+          dispositivi +=
+            Number(risultato?.sent) || 0;
+        } catch (errore) {
+          falliti += 1;
+
+          console.warn(
+            "Comunicazione non inviata a:",
+            destinatario.id,
+            errore
+          );
+        }
+
+        setProgressoComunicazione(
+          `Invio ${notificati + falliti}/${destinatari.length}`
+        );
+      }
+    };
+
+    await Promise.all(
+      Array.from(
+        {
+          length: Math.min(4, coda.length)
+        },
+        inviaSuccessivo
+      )
+    );
+
+    if (destinatari.length === 0) {
+      alert(
+        "Comunicazione pubblicata. Nessun iscritto da notificare al momento."
+      );
+    } else if (falliti > 0) {
+      alert(
+        `Comunicazione pubblicata. Notificata a ${notificati} iscritti su ${destinatari.length}: ${falliti} non raggiunti.`
+      );
+    } else {
+      alert(
+        `Comunicazione pubblicata e notificata a tutti (${notificati} iscritti, ${dispositivi} dispositivi).`
+      );
+    }
+  } catch (errore) {
+    console.error(
+      "Errore durante la comunicazione di servizio:",
+      errore
+    );
+
+    alert(
+      "Non è stato possibile pubblicare la comunicazione. Riprova."
+    );
+  } finally {
+    setInvioComunicazioneInCorso(false);
+    setProgressoComunicazione("");
+  }
+};
+
+const eliminaComunicazioneServizio = async (
+  id
+) => {
+  if (!isAdmin) return;
+
+  if (
+    !window.confirm(
+      "Eliminare questa comunicazione di servizio?"
+    )
+  ) {
+    return;
+  }
+
+  try {
+    await deleteDoc(
+      doc(db, "serviceNotices", id)
+    );
+  } catch (errore) {
+    console.error(
+      "Errore eliminazione comunicazione di servizio:",
+      errore
+    );
+
+    alert(
+      "Non è stato possibile eliminare la comunicazione."
     );
   }
 };
@@ -2251,6 +2455,39 @@ const unsubscribe = onSnapshot(
 
 }, [user, isAdmin]);
 
+/*
+ * Comunicazioni di servizio: sono pubbliche, quindi il listener non
+ * dipende dall'utente e la card compare anche a chi non ha fatto
+ * l'accesso.
+ */
+useEffect(() => {
+  const unsubscribe = onSnapshot(
+    collection(db, "serviceNotices"),
+    (snapshot) => {
+      const lista = snapshot.docs.map((docu) => ({
+        id: docu.id,
+        ...docu.data()
+      }));
+
+      lista.sort(
+        (a, b) =>
+          new Date(b.createdAt || 0) -
+          new Date(a.createdAt || 0)
+      );
+
+      setComunicazioniServizio(lista);
+    },
+    (errore) => {
+      console.error(
+        "Errore listener comunicazioni di servizio:",
+        errore
+      );
+    }
+  );
+
+  return () => unsubscribe();
+}, []);
+
 const nonLette =
   notifications.filter(
     (n) => !n.read
@@ -2545,6 +2782,15 @@ return (
     Invia Spotted
   </button>
 
+<div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: "8px"
+  }}
+>
+
 {user && (
   <span
     onClick={() =>
@@ -2563,6 +2809,27 @@ return (
     + Proponi gruppo
   </span>
 )}
+
+{isAdmin && (
+  <span
+    onClick={() =>
+      setMostraComunicazioneServizio(
+        !mostraComunicazioneServizio
+      )
+    }
+    style={{
+      cursor: "pointer",
+      color: "#f4c542",
+      fontSize: "14px",
+      fontWeight: "600",
+      textDecoration: "underline"
+    }}
+  >
+    + Comunicazione di servizio
+  </span>
+)}
+
+</div>
 
 </div>
 
@@ -2638,6 +2905,61 @@ return (
 
 </div>
 
+)}
+
+{isAdmin && mostraComunicazioneServizio && (
+<div className="section-card service-notice-form">
+
+  <h2>🔧 Comunicazione di servizio</h2>
+
+  <p>
+    Compare tra gli spotted con il bordo dorato e arriva subito come
+    notifica e push a tutti gli iscritti. Non serve alcuna
+    approvazione.
+  </p>
+
+  <textarea
+    rows="4"
+    value={testoComunicazione}
+    maxLength={500}
+    onChange={(e) =>
+      setTestoComunicazione(
+        e.target.value
+      )
+    }
+    placeholder="Es. Sabato 8 novembre il servizio resterà chiuso per manutenzione."
+  />
+
+  <p
+    style={{
+      fontSize: "12px",
+      color: "#999"
+    }}
+  >
+    {testoComunicazione.length}/500
+  </p>
+
+  {progressoComunicazione && (
+    <p
+      style={{
+        color: "#f4c542",
+        fontSize: "13px"
+      }}
+    >
+      {progressoComunicazione}
+    </p>
+  )}
+
+  <button
+    onClick={inviaComunicazioneServizio}
+    disabled={invioComunicazioneInCorso}
+  >
+    {invioComunicazioneInCorso
+      ? "Invio in corso..."
+      : "📣 Pubblica e notifica tutti"}
+  </button>
+
+</div>
 )}
 
 </div>
@@ -3213,6 +3535,48 @@ setRicercaSpotted(e.target.value)
 }
 />
 )}
+{comunicazioniServizio.map((comunicazione) => (
+<article
+  key={comunicazione.id}
+  className="service-notice"
+>
+  <div className="service-notice-top">
+    <span className="service-notice-label">
+      🔧 COMUNICAZIONE DI SERVIZIO
+    </span>
+
+    {isAdmin && (
+      <button
+        className="service-notice-delete"
+        onClick={() =>
+          eliminaComunicazioneServizio(
+            comunicazione.id
+          )
+        }
+        aria-label="Elimina comunicazione di servizio"
+        title="Elimina comunicazione"
+      >
+        ✕
+      </button>
+    )}
+  </div>
+
+  <p className="service-notice-text">
+    {comunicazione.text}
+  </p>
+
+  <small className="service-notice-date">
+    {new Date(
+      comunicazione.createdAt
+    ).toLocaleString("it-IT", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    })}
+  </small>
+</article>
+))}
 {posts
   .filter((post) =>
     post.text

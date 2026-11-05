@@ -3558,6 +3558,224 @@ if (
     }
 
     /*
+     * Comunicazione di servizio: l'admin la pubblica e arriva come
+     * notifica interna + push immediata a un destinatario per
+     * chiamata. Il fan-out lo pilota il browser dell'admin, che ha
+     * gia' l'elenco degli iscritti: una invocazione per utente resta
+     * dentro il limite di sotto-richieste del piano gratuito, che un
+     * ciclo unico su tutti gli iscritti supererebbe.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/notify-service-notice"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (
+          !utenteAmministratore(profilo)
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono pubblicare una comunicazione di servizio."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        let corpo;
+
+        try {
+          corpo = await request.json();
+        } catch {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Corpo JSON della richiesta non valido."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const noticeId =
+          typeof corpo.noticeId === "string"
+            ? corpo.noticeId.trim()
+            : "";
+
+        const recipientUserId =
+          typeof corpo.recipientUserId ===
+          "string"
+            ? corpo.recipientUserId.trim()
+            : "";
+
+        const testo =
+          typeof corpo.text === "string"
+            ? corpo.text.trim()
+            : "";
+
+        if (
+          !noticeId ||
+          !recipientUserId ||
+          !testo
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "noticeId, recipientUserId e text sono obbligatori."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (
+          noticeId.length > 200 ||
+          recipientUserId.length > 128 ||
+          testo.length > 500
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Uno o più campi superano la lunghezza consentita."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount =
+          JSON.parse(
+            env.FIREBASE_SERVICE_ACCOUNT
+          );
+
+        const accessToken =
+          await ottieniAccessToken(
+            serviceAccount
+          );
+
+        const titolo =
+          "🔧 Comunicazione di servizio";
+
+        const notificationId =
+          `service_${noticeId}_${recipientUserId}`;
+
+        /*
+         * La notifica interna viene creata una volta sola: con un
+         * nuovo tentativo (doppio clic, ricarica) l'ID esiste gia' e
+         * il destinatario non riceve una seconda push.
+         */
+        const notifica =
+          await creaNotificaInterna({
+            env,
+            accessToken,
+            userId: recipientUserId,
+            type: "service",
+            title: titolo,
+            body: testo.slice(0, 500),
+            postId: null,
+            notificationId
+          });
+
+        if (!notifica) {
+          return rispostaJson(
+            {
+              success: true,
+              alreadySent: true,
+              recipientUserId,
+              notificationId,
+              totalDevices: 0,
+              sent: 0,
+              failed: 0
+            },
+            200,
+            origin,
+            env
+          );
+        }
+
+        const push =
+          await inviaPushAUtente({
+            env,
+            accessToken,
+            recipientUserId,
+            title: titolo,
+            body: testo.slice(0, 200),
+            url: "/",
+            notificationId,
+            postId: ""
+          });
+
+        return rispostaJson(
+          {
+            success: true,
+            recipientUserId,
+            notificationId,
+            ...push
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /notify-service-notice:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante l'invio della comunicazione di servizio."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
      * Prova manuale dei riepiloghi, riservata agli admin.
      * Con dryRun: true calcola testo e destinatari senza inviare nulla.
      */

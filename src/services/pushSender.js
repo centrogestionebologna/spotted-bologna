@@ -175,6 +175,42 @@ export const notificaAttivitaPost = async ({
   );
 };
 
+/*
+ * Comunicazione di servizio: notifica interna + push immediata a un
+ * solo destinatario. L'elenco degli iscritti lo tiene il browser
+ * dell'admin, cosi' ogni utente costa una invocazione del Worker e non
+ * si supera il limite di sotto-richieste del piano gratuito.
+ */
+export const notificaComunicazioneServizio = async ({
+  noticeId,
+  text,
+  recipientUserId
+}) => {
+  if (
+    !noticeId ||
+    !recipientUserId ||
+    typeof noticeId !== "string" ||
+    typeof recipientUserId !== "string"
+  ) {
+    throw new Error(
+      "Dati della comunicazione di servizio mancanti."
+    );
+  }
+
+  return eseguiRichiestaWorker(
+    "/notify-service-notice",
+    {
+      noticeId: noticeId.trim(),
+      recipientUserId:
+        recipientUserId.trim(),
+      text:
+        typeof text === "string"
+          ? text.slice(0, 500)
+          : ""
+    }
+  );
+};
+
 export const inviaPushAUtente = async ({
   recipientUserId,
   title,

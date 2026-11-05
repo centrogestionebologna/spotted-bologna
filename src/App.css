@@ -1145,3 +1145,57 @@ details summary {
     animation: none;
   }
 }
+
+/* Comunicazione di servizio: card dorata in evidenza tra gli spotted. */
+.service-notice {
+  position: relative;
+  background: linear-gradient(160deg, #2a2008 0%, #161616 60%);
+  border: 2px solid #f4c542;
+  border-radius: 20px;
+  padding: 18px;
+  margin-bottom: 20px;
+  box-shadow: 0 0 22px rgba(244, 197, 66, 0.28);
+}
+
+.service-notice-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.service-notice-label {
+  color: #f4c542;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+
+.service-notice-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.service-notice-date {
+  display: block;
+  margin-top: 10px;
+  color: #9a9a9a;
+  font-size: 12px;
+}
+
+.service-notice-delete {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(244, 197, 66, 0.65);
+  border-radius: 50%;
+  background: transparent;
+  color: #f4c542;
+  font-size: 12px;
+  line-height: 1;
+}
