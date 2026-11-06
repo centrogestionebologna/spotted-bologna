@@ -43,7 +43,9 @@ import {
 import {
   ascoltaNotificheInPrimoPiano,
   mostraNotificaInPrimoPiano,
-  sincronizzaTokenPush
+  sincronizzaTokenPush,
+  attivaNotifichePush,
+  infoSupportoPush
 } from "./services/pushNotifications";
 
 // Ridimensiona e comprime l'immagine, restituisce una stringa base64
@@ -381,6 +383,21 @@ const sincronizzazioneConteggioUtentiRef = useRef(Promise.resolve());
 const pendingNotificheInCorsoRef = useRef(new Set());
 const uidUtenteCaricatoRef = useRef(null);
 const [avvioConcluso, setAvvioConcluso] = useState(false);
+
+/*
+ * Secondo passo del primo accesso: dopo il nickname l'utente sceglie
+ * la frequenza dei riepiloghi e puo' attivare le push. Serve perche'
+ * quasi nessuno andava a cercare le impostazioni dentro il profilo.
+ */
+const [passoNotifiche, setPassoNotifiche] = useState(false);
+const [salvataggioNotifiche, setSalvataggioNotifiche] =
+  useState(false);
+const [attivazionePushOnboarding, setAttivazionePushOnboarding] =
+  useState(false);
+const [messaggioPushOnboarding, setMessaggioPushOnboarding] =
+  useState("");
+const [pushAttiveOnboarding, setPushAttiveOnboarding] =
+  useState(false);
 
   const [newsletter, setNewsletter] =
   useState("mai");
@@ -1142,6 +1159,9 @@ const salvaNickname = async () => {
 
     setNickname(nicknamePulito);
     setSavedNickname(nicknamePulito);
+
+    /* Nickname salvato: si passa alla scelta delle notifiche. */
+    setPassoNotifiche(true);
   } catch (error) {
     console.error(
       "Errore durante il salvataggio del nickname:",
@@ -1163,6 +1183,61 @@ const salvaNickname = async () => {
     }
   } finally {
     setSalvataggioNickname(false);
+  }
+};
+
+/*
+ * Chiude il passo delle notifiche salvando la frequenza scelta. Il
+ * fallimento non deve bloccare l'ingresso nell'app: le preferenze
+ * restano modificabili dal profilo.
+ */
+const confermaOnboardingNotifiche = async () => {
+  setSalvataggioNotifiche(true);
+
+  try {
+    if (user) {
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          newsletter,
+          notificheImpostate: true
+        },
+        { merge: true }
+      );
+    }
+  } catch (errore) {
+    console.warn(
+      "Preferenze notifiche non salvate:",
+      errore
+    );
+  } finally {
+    setSalvataggioNotifiche(false);
+    setPassoNotifiche(false);
+  }
+};
+
+const attivaPushOnboarding = async () => {
+  setAttivazionePushOnboarding(true);
+  setMessaggioPushOnboarding("");
+
+  try {
+    await attivaNotifichePush();
+
+    setPushAttiveOnboarding(true);
+    setMessaggioPushOnboarding(
+      "✅ Notifiche push attivate su questo dispositivo."
+    );
+  } catch (errore) {
+    console.warn(
+      "Attivazione push dal primo accesso fallita:",
+      errore
+    );
+
+    setMessaggioPushOnboarding(
+      `❌ ${errore.message}`
+    );
+  } finally {
+    setAttivazionePushOnboarding(false);
   }
 };
 
@@ -3271,6 +3346,13 @@ if (!avvioConcluso) {
   );
 }
 
+const supportoPushOnboarding = infoSupportoPush();
+
+const pushGiaAttive =
+  pushAttiveOnboarding ||
+  (typeof Notification !== "undefined" &&
+    Notification.permission === "granted");
+
 return (
   <div className="app-container">
 
@@ -3287,7 +3369,7 @@ return (
     document.getElementById("profile-notifications")?.setAttribute("open", "true");
   }}
 />
-{user && savedNickname && (
+{user && savedNickname && !passoNotifiche && (
   <>      <ProfileCard
       nickname={savedNickname}
       iscritti={isAdmin ? utenti.length : numeroIscritti}
@@ -3382,7 +3464,112 @@ return (
   </div>
 )}
 
-{user && !savedNickname ? null : (
+{user && savedNickname && passoNotifiche && (
+  <div className="section-card onboarding-notifiche">
+
+    <h2>🔔 Come vuoi essere avvisato?</h2>
+
+    <p className="onboarding-notifiche-intro">
+      Scegli ogni quanto ricevere il riepilogo di Spotted Bologna.
+      Puoi cambiarlo quando vuoi dal tuo profilo.
+    </p>
+
+    <div className="newsletter-options">
+
+      <label className="newsletter-option">
+        <input
+          type="radio"
+          name="onboarding-newsletter"
+          checked={newsletter === "giornaliera"}
+          onChange={() =>
+            setNewsletter("giornaliera")
+          }
+        />
+        <span>
+          Giornaliera — un riepilogo ogni giorno alle 14
+        </span>
+      </label>
+
+      <label className="newsletter-option">
+        <input
+          type="radio"
+          name="onboarding-newsletter"
+          checked={newsletter === "settimanale"}
+          onChange={() =>
+            setNewsletter("settimanale")
+          }
+        />
+        <span>
+          Settimanale — un riepilogo la domenica alle 14
+        </span>
+      </label>
+
+      <label className="newsletter-option">
+        <input
+          type="radio"
+          name="onboarding-newsletter"
+          checked={newsletter === "mai"}
+          onChange={() => setNewsletter("mai")}
+        />
+        <span>Mai — nessun riepilogo</span>
+      </label>
+
+    </div>
+
+    <hr />
+
+    <h3>Notifiche push</h3>
+
+    <p>
+      Le push arrivano subito, anche a sito chiuso: nuovi commenti e
+      like sugli spotted che segui, più le novità importanti.
+    </p>
+
+    <button
+      type="button"
+      onClick={attivaPushOnboarding}
+      disabled={
+        attivazionePushOnboarding || pushGiaAttive
+      }
+    >
+      {attivazionePushOnboarding
+        ? "Attivazione..."
+        : pushGiaAttive
+        ? "🔔 Push attive su questo dispositivo"
+        : "🔔 Attiva notifiche push"}
+    </button>
+
+    {supportoPushOnboarding.iOS &&
+      !supportoPushOnboarding.standalone && (
+        <p className="push-notifications-message">
+          📱 Su iPhone le notifiche funzionano solo dall'app
+          installata: tocca Condividi, scegli “Aggiungi alla
+          schermata Home” e riapri Spotted Bologna dall'icona.
+        </p>
+      )}
+
+    {messaggioPushOnboarding && (
+      <p className="push-notifications-message">
+        {messaggioPushOnboarding}
+      </p>
+    )}
+
+    <div className="onboarding-notifiche-actions">
+      <button
+        type="button"
+        onClick={confermaOnboardingNotifiche}
+        disabled={salvataggioNotifiche}
+      >
+        {salvataggioNotifiche
+          ? "Salvataggio..."
+          : "Continua"}
+      </button>
+    </div>
+
+  </div>
+)}
+
+{user && (!savedNickname || passoNotifiche) ? null : (
 <>
 
 <div className="section-card">

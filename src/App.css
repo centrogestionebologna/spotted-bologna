@@ -1146,6 +1146,19 @@ details summary {
   }
 }
 
+/* Primo accesso: scelta della frequenza dei riepiloghi e push. */
+.onboarding-notifiche-intro {
+  color: #cfcfcf;
+  line-height: 1.5;
+}
+
+.onboarding-notifiche-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
 /* Comunicazione di servizio: card dorata in evidenza tra gli spotted. */
 .service-notice {
   position: relative;
