@@ -1231,6 +1231,13 @@ const inviaSpotted = async () => {
       : null
   };
 
+  /*
+   * Il campo si svuota prima di toccare il server: salvataggio, push e
+   * ricarico del feed avvengono dopo, senza far aspettare chi scrive.
+   */
+  setUltimoInvio(Date.now());
+  setSpottedText("");
+
   try {
     if (vaInModerazione) {
       const pendingRef = await addDoc(
@@ -1243,7 +1250,7 @@ const inviaSpotted = async () => {
       );
 
       if (isAdmin) {
-        await caricaPendingPosts();
+        caricaPendingPosts();
       }
 
       alert(
@@ -1255,33 +1262,39 @@ const inviaSpotted = async () => {
         nuovoPost
       );
 
-      await notificaAmministratori({
-        type: "new-post",
-        title: "📝 Nuovo spotted pubblicato",
-        body: (nuovoPost.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
-        postId: postRef.id,
-        inviaPush: true
-      });
-
       console.log(
         "Spotted pubblicato automaticamente:",
         postRef.id
       );
 
-      await caricaPost();
+      notificaAmministratori({
+        type: "new-post",
+        title: "📝 Nuovo spotted pubblicato",
+        body: (nuovoPost.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
+        postId: postRef.id,
+        inviaPush: true
+      }).catch((erroreNotifica) => {
+        console.warn(
+          "Spotted pubblicato, notifica non inviata:",
+          erroreNotifica
+        );
+      });
+
+      caricaPost();
 
       alert(
         "Il tuo spotted è stato pubblicato."
       );
     }
-
-    setUltimoInvio(Date.now());
-    setSpottedText("");
   } catch (erroreSalvataggio) {
     console.error(
       "Errore durante l'invio dello spotted:",
       erroreSalvataggio
     );
+
+    /* Niente cooldown e testo recuperato: il tentativo non è costato nulla. */
+    setUltimoInvio(0);
+    setSpottedText(testoPulito);
 
     alert(
       "Non è stato possibile inviare lo spotted. Riprova."
@@ -1813,12 +1826,7 @@ const toggleLike = async (postId) => {
 
     deleteDoc(
       doc(db, "likes", likeEsistente.id)
-    )
-      .then(() => {
-        /* Riallineamento silenzioso: il cuore non aspetta questa lettura. */
-        caricaLike();
-      })
-      .catch((errore) => {
+    ).catch((errore) => {
         console.error(
           "Like non rimosso:",
           errore
@@ -1866,8 +1874,11 @@ const toggleLike = async (postId) => {
       )
     );
 
-    /* Riallineamento silenzioso con gli altri like nel frattempo. */
-    caricaLike();
+    /*
+     * Nessuna rilettura della collezione qui: il like locale è già
+     * quello giusto, e un getDocs lento poteva sovrascriverlo con uno
+     * snapshot precedente facendo tornare il cuore bianco un istante.
+     */
 
     /*
      * Come per i commenti: seguaci e preferenze le legge il Worker, e
@@ -3568,13 +3579,15 @@ return (
     marginBottom: "15px"
   }}
 >
-  ✏️ Richieste cambio nickname ({richiesteNickname.length})
+  📩 Pending ({pendingPosts.length + richiesteNickname.length})
 </summary>
 
 <div className="section-card">
 
+<h3>✏️ Cambi nickname ({richiesteNickname.length})</h3>
+
 {richiesteNickname.length === 0 && (
-  <p>Nessuna richiesta in attesa.</p>
+  <p>Nessuna richiesta di cambio nickname.</p>
 )}
 
 {richiesteNickname.map((richiesta) => (
@@ -3624,21 +3637,11 @@ return (
 
 </div>
 
-</details>
+<h3>📝 Spotted da approvare ({pendingPosts.length})</h3>
 
-<details className="admin-dashboard">
-
-
-<summary
-  style={{
-    cursor: "pointer",
-    fontSize: "22px",
-    fontWeight: "bold",
-    marginBottom: "15px"
-  }}
->
-  📩 Pending ({pendingPosts.length})
-</summary>
+{pendingPosts.length === 0 && (
+  <p>Nessuno spotted in attesa.</p>
+)}
 
   <AdminPanel
     pendingPosts={pendingPosts}
