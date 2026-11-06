@@ -2766,6 +2766,41 @@ useEffect(() => {
   return () => unsubscribe();
 }, [isAdmin]);
 
+/*
+ * Il feed e' una lista sola: comunicazioni di servizio e spotted stanno
+ * insieme, ordinati per data. Cosi' una comunicazione non resta ancorata
+ * in cima ma scende quando viene pubblicato uno spotted piu' recente, e
+ * segue la stessa paginazione di “Mostra altri spotted”.
+ */
+const testoRicerca = ricercaSpotted.toLowerCase();
+
+const feed = [
+  ...posts
+    .filter((post) =>
+      String(post.text || "")
+        .toLowerCase()
+        .includes(testoRicerca)
+    )
+    .map((post) => ({
+      chiave: `post-${post.id}`,
+      tipo: "post",
+      createdAt: post.createdAt,
+      post
+    })),
+  ...comunicazioniServizio.map(
+    (comunicazione) => ({
+      chiave: `comunicazione-${comunicazione.id}`,
+      tipo: "comunicazione",
+      createdAt: comunicazione.createdAt,
+      comunicazione
+    })
+  )
+].sort(
+  (a, b) =>
+    new Date(b.createdAt || 0) -
+    new Date(a.createdAt || 0)
+);
+
 const nonLette =
   notifications.filter(
     (n) => !n.read
@@ -2833,12 +2868,14 @@ useEffect(() => {
  * allarga prima l'elenco, altrimenti la card non esisterebbe nel DOM.
  */
 useEffect(() => {
-  if (!spottedDaAprire || posts.length === 0) {
+  if (!spottedDaAprire || feed.length === 0) {
     return;
   }
 
-  const indice = posts.findIndex(
-    (post) => post.id === spottedDaAprire
+  const indice = feed.findIndex(
+    (elemento) =>
+      elemento.tipo === "post" &&
+      elemento.post.id === spottedDaAprire
   );
 
   if (indice === -1) {
@@ -2915,7 +2952,7 @@ useEffect(() => {
       window.location.pathname
     );
   }
-}, [spottedDaAprire, posts, postVisibili]);
+}, [feed, spottedDaAprire, postVisibili]);
 
 /*
  * Sblocco di una proposta gruppo: segna lo sblocco e chiede al Worker di
@@ -4197,61 +4234,54 @@ setRicercaSpotted(e.target.value)
 }
 />
 )}
-{comunicazioniServizio.map((comunicazione) => (
-<article
-  key={comunicazione.id}
-  className="service-notice"
->
-  <div className="service-notice-top">
-    <span className="service-notice-label">
-      🔧 COMUNICAZIONE DI SERVIZIO
-    </span>
-
-    {isAdmin && (
-      <button
-        className="service-notice-delete"
-        onClick={() =>
-          eliminaComunicazioneServizio(
-            comunicazione.id
-          )
-        }
-        aria-label="Elimina comunicazione di servizio"
-        title="Elimina comunicazione"
-      >
-        ✕
-      </button>
-    )}
-  </div>
-
-  <p className="service-notice-text">
-    {comunicazione.text}
-  </p>
-
-  <small className="service-notice-date">
-    {new Date(
-      comunicazione.createdAt
-    ).toLocaleString("it-IT", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit"
-    })}
-  </small>
-</article>
-))}
-{posts
-  .filter((post) =>
-    post.text
-      .toLowerCase()
-      .includes(
-        ricercaSpotted.toLowerCase()
-      )
-  )
+{feed
   .slice(0, postVisibili)
-  .map((post) => (
+  .map((elemento) =>
+  elemento.tipo === "comunicazione" ? (
+  <article
+    key={elemento.chiave}
+    className="service-notice"
+  >
+    <div className="service-notice-top">
+      <span className="service-notice-label">
+        🔧 COMUNICAZIONE DI SERVIZIO
+      </span>
+
+      {isAdmin && (
+        <button
+          className="service-notice-delete"
+          onClick={() =>
+            eliminaComunicazioneServizio(
+              elemento.comunicazione.id
+            )
+          }
+          aria-label="Elimina comunicazione di servizio"
+          title="Elimina comunicazione"
+        >
+          ✕
+        </button>
+      )}
+    </div>
+
+    <p className="service-notice-text">
+      {elemento.comunicazione.text}
+    </p>
+
+    <small className="service-notice-date">
+      {new Date(
+        elemento.comunicazione.createdAt
+      ).toLocaleString("it-IT", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      })}
+    </small>
+  </article>
+  ) : (
   <Post
-    key={post.id}
-    post={post}
+    key={elemento.chiave}
+    post={elemento.post}
     comments={comments}
     user={user}
     commentInputs={commentInputs}
@@ -4267,9 +4297,10 @@ setRicercaSpotted(e.target.value)
     toggleFollowPost={toggleFollowPost}
     followRequestInProgress={followRequestInProgress}
   />
-))}
+  )
+)}
 
-{posts.length > postVisibili && (
+{feed.length > postVisibili && (
   <button
     onClick={() =>
       setPostVisibili(
