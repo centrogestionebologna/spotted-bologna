@@ -355,6 +355,13 @@ const [spottedDaAprire, setSpottedDaAprire] =
   useState("");
 
 /*
+ * Gli scroll ripetuti verso lo spotted vivono in un ref: azzerando lo
+ * stato l'effect viene rieseguito e i tentativi successivi verrebbero
+ * annullati dalla pulizia.
+ */
+const scrollSpottedTimersRef = useRef([]);
+
+/*
  * Cambio nickname: la richiesta in attesa dell'utente, l'elenco che vede
  * l'admin e lo stato del pulsante di invio.
  */
@@ -2816,7 +2823,7 @@ useEffect(() => {
  */
 useEffect(() => {
   if (!spottedDaAprire || posts.length === 0) {
-    return undefined;
+    return;
   }
 
   const indice = posts.findIndex(
@@ -2824,48 +2831,79 @@ useEffect(() => {
   );
 
   if (indice === -1) {
-    return undefined;
+    return;
   }
 
   if (indice + 1 > postVisibili) {
     setPostVisibili(indice + 1);
-    return undefined;
+    return;
   }
 
-  const timeout = setTimeout(() => {
-    const elemento = document.getElementById(
-      `post-${spottedDaAprire}`
+  /*
+   * Il profilo sta sopra al feed e si allunga mentre arrivano notifiche
+   * e iscritti: aspettare un solo istante farebbe perdere lo scroll,
+   * perche' la card scende mentre la pagina si carica. Si ripete quindi
+   * lo scroll per qualche secondo e si disattiva il ripristino
+   * automatico della posizione fatto dal browser.
+   */
+  if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+  }
+
+  const identificatore = `post-${spottedDaAprire}`;
+
+  scrollSpottedTimersRef.current.forEach(
+    clearTimeout
+  );
+  scrollSpottedTimersRef.current = [];
+
+  const vaiAllaCard = () => {
+    const card = document.getElementById(
+      identificatore
     );
 
-    if (!elemento) return;
+    if (!card) return;
 
-    elemento.scrollIntoView({
-      behavior: "smooth",
-      block: "center"
+    const alto =
+      card.getBoundingClientRect().top +
+      window.scrollY -
+      90;
+
+    window.scrollTo({
+      top: Math.max(alto, 0),
+      behavior: "smooth"
     });
 
-    elemento.classList.add(
-      "post-evidenziato"
-    );
+    card.classList.add("post-evidenziato");
+  };
 
-    setTimeout(() => {
-      elemento.classList.remove(
-        "post-evidenziato"
-      );
-    }, 4000);
-
-    setSpottedDaAprire("");
-
-    if (window.history.replaceState) {
-      window.history.replaceState(
-        {},
-        "",
-        window.location.pathname
+  [150, 500, 1000, 1700, 2600].forEach(
+    (ritardo) => {
+      scrollSpottedTimersRef.current.push(
+        setTimeout(vaiAllaCard, ritardo)
       );
     }
-  }, 150);
+  );
 
-  return () => clearTimeout(timeout);
+  scrollSpottedTimersRef.current.push(
+    setTimeout(() => {
+      document
+        .getElementById(identificatore)
+        ?.classList.remove(
+          "post-evidenziato"
+        );
+    }, 8000)
+  );
+
+  setSpottedDaAprire("");
+
+  if (window.history.replaceState) {
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname
+    );
+  }
 }, [spottedDaAprire, posts, postVisibili]);
 
 /*

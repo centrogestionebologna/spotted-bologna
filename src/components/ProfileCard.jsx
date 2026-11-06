@@ -82,29 +82,20 @@ const inviaRichiestaCambio = async () => {
 };
 
 /*
- * Le notifiche non lette si vedono sempre tutte; delle lette restano
- * visibili le tre piu' recenti e “Mostra altre notifiche” apre le
- * successive, che sono le piu' vecchie.
+ * Si vedono sempre le tre notifiche piu' recenti; “Mostra altre
+ * notifiche” apre le successive, che sono le piu' vecchie.
  */
-const LIMITE_LETTE_INIZIALE = 3;
-const PASSO_LETTE = 5;
+const LIMITE_NOTIFICHE_INIZIALE = 3;
+const PASSO_NOTIFICHE = 5;
 
-const [letteVisibili, setLetteVisibili] =
-  useState(LIMITE_LETTE_INIZIALE);
+const [
+  notificheVisibiliNumero,
+  setNotificheVisibiliNumero
+] = useState(LIMITE_NOTIFICHE_INIZIALE);
 
-let letteMostrate = 0;
-
-const notificheVisibili = notifications.filter(
-  (notifica) => {
-    if (!notifica.read) return true;
-
-    if (letteMostrate >= letteVisibili) {
-      return false;
-    }
-
-    letteMostrate += 1;
-    return true;
-  }
+const notificheVisibili = notifications.slice(
+  0,
+  notificheVisibiliNumero
 );
 
 const notificheNascoste =
@@ -553,9 +544,9 @@ const gestisciAttivazionePush = async () => {
                 type="button"
                 className="notifications-show-more"
                 onClick={() =>
-                  setLetteVisibili(
+                  setNotificheVisibiliNumero(
                     (correnti) =>
-                      correnti + PASSO_LETTE
+                      correnti + PASSO_NOTIFICHE
                   )
                 }
               >
