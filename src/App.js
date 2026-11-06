@@ -48,6 +48,62 @@ import {
   infoSupportoPush
 } from "./services/pushNotifications";
 
+/*
+ * Etichette leggibili per le preferenze salvate sul profilo: nella
+ * Dashboard Community i valori grezzi ("giornaliera", true, ...) non
+ * dicono niente a chi legge.
+ */
+const descriviNewsletter = (valore) => {
+  if (valore === "giornaliera") {
+    return "Giornaliera — ogni giorno alle 14";
+  }
+
+  if (valore === "settimanale") {
+    return "Settimanale — domenica alle 14";
+  }
+
+  if (valore === "immediata") {
+    return "Immediata";
+  }
+
+  return "Mai";
+};
+
+const descriviSiNo = (valore, predefinito = false) =>
+  (valore === undefined ? predefinito : valore)
+    ? "Sì"
+    : "No";
+
+/* Campi già mostrati con un'etichetta: il resto finisce in “Altri dati”. */
+const CAMPI_UTENTE_MOSTRATI = [
+  "id",
+  "uid",
+  "name",
+  "email",
+  "role",
+  "nickname",
+  "newsletter",
+  "notifyComments",
+  "notifyLikes",
+  "notifyPending",
+  "notifyReports",
+  "notifyNewUsers",
+  "notifyNewPosts",
+  "notifyAllComments",
+  "notifyAllLikes",
+  "adminNotificationsConfigured",
+  "notificheImpostate",
+  "pushEnabled",
+  "createdAt",
+  "banned"
+];
+
+const altriDatiUtente = (utente) =>
+  Object.entries(utente).filter(
+    ([chiave]) =>
+      !CAMPI_UTENTE_MOSTRATI.includes(chiave)
+  );
+
 // Ridimensiona e comprime l'immagine, restituisce una stringa base64
 const comprimiImmagine = (
   file,
@@ -748,6 +804,56 @@ const caricaFollowers = async () => {
   });
 
   setPostFollowers(lista);
+};
+
+/*
+ * I dispositivi con le push attive non stanno nel documento utente ma
+ * nella sottocollezione users/{uid}/pushTokens: si contano solo quando
+ * l'admin lo chiede, per non fare una lettura per ogni utente.
+ */
+const [dispositiviPush, setDispositiviPush] = useState({});
+
+const [conteggioPushInCorso, setConteggioPushInCorso] =
+  useState({});
+
+const caricaDispositiviPush = async (uid) => {
+  if (!uid || conteggioPushInCorso[uid]) return;
+
+  setConteggioPushInCorso((correnti) => ({
+    ...correnti,
+    [uid]: true
+  }));
+
+  try {
+    const snapshot = await getDocs(
+      collection(db, "users", uid, "pushTokens")
+    );
+
+    const attivi = snapshot.docs.filter(
+      (documento) =>
+        documento.data().enabled !== false
+    ).length;
+
+    setDispositiviPush((correnti) => ({
+      ...correnti,
+      [uid]: attivi
+    }));
+  } catch (errore) {
+    console.warn(
+      "Impossibile contare i dispositivi push:",
+      errore
+    );
+
+    setDispositiviPush((correnti) => ({
+      ...correnti,
+      [uid]: null
+    }));
+  } finally {
+    setConteggioPushInCorso((correnti) => ({
+      ...correnti,
+      [uid]: false
+    }));
+  }
 };
 
 const aggiornaUtenti = (snapshot) => {
@@ -4019,27 +4125,18 @@ return (
   </p>
 
   <p>
+    <strong>Nome Google:</strong>{" "}
+    {utente.name || "—"}
+  </p>
+
+  <p>
     <strong>Email:</strong>{" "}
-    {utente.email}
+    {utente.email || "—"}
   </p>
 
   <p>
     <strong>Ruolo:</strong>{" "}
-    {utente.role}
-  </p>
-
-<p>
-  <strong>Newsletter:</strong>{" "}
-  {utente.newsletter || "Mai"}
-</p>
-
-  <p>
-    <strong>Registrato il:</strong>{" "}
-    {utente.createdAt
-  ? new Date(
-      utente.createdAt
-    ).toLocaleDateString("it-IT")
-  : "-"}
+    {utente.role || "user"}
   </p>
 
   <p>
@@ -4048,6 +4145,105 @@ return (
       ? "🔴 Bannato"
       : "🟢 Attivo"}
   </p>
+
+  <p>
+    <strong>Registrato il:</strong>{" "}
+    {utente.createdAt
+  ? new Date(
+      utente.createdAt
+    ).toLocaleString("it-IT")
+  : "—"}
+  </p>
+
+  <p>
+    <strong>Riepilogo:</strong>{" "}
+    {descriviNewsletter(utente.newsletter)}
+  </p>
+
+  <p>
+    <strong>Notifiche commenti:</strong>{" "}
+    {descriviSiNo(utente.notifyComments, true)}
+  </p>
+
+  <p>
+    <strong>Notifiche like:</strong>{" "}
+    {descriviSiNo(utente.notifyLikes)}
+  </p>
+
+  <p>
+    <strong>Preferenze notifiche impostate:</strong>{" "}
+    {descriviSiNo(utente.notificheImpostate)}
+  </p>
+
+  {utente.role === "admin" && (
+    <p>
+      <strong>Notifiche admin:</strong>{" "}
+      pending {descriviSiNo(utente.notifyPending, true)}
+      {" · "}segnalazioni {descriviSiNo(utente.notifyReports, true)}
+      {" · "}nuovi iscritti {descriviSiNo(utente.notifyNewUsers, true)}
+      {" · "}nuovi post {descriviSiNo(utente.notifyNewPosts, true)}
+      {" · "}tutti i commenti {descriviSiNo(utente.notifyAllComments)}
+      {" · "}tutti i like {descriviSiNo(utente.notifyAllLikes)}
+    </p>
+  )}
+
+  <p>
+    <strong>Dispositivi con push:</strong>{" "}
+    {dispositiviPush[utente.uid] === undefined
+      ? "non verificato"
+      : dispositiviPush[utente.uid] === null
+      ? "non disponibile"
+      : dispositiviPush[utente.uid]}
+  </p>
+
+  <p>
+    <strong>Attività:</strong>{" "}
+    {posts.filter(
+      (post) => (post.authorId || "") === utente.uid
+    ).length}{" spotted · "}
+    {comments.filter(
+      (commento) => commento.userId === utente.uid
+    ).length}{" commenti · "}
+    {likes.filter(
+      (like) => like.userId === utente.uid
+    ).length}{" like · "}
+    {postFollowers.filter(
+      (follow) => follow.userId === utente.uid
+    ).length}{" spotted seguiti"}
+  </p>
+
+  <p>
+    <strong>UID:</strong>{" "}
+    <code>{utente.uid || utente.id}</code>
+  </p>
+
+  {altriDatiUtente(utente).length > 0 && (
+    <div className="user-card-extra">
+      <strong>Altri dati</strong>
+
+      {altriDatiUtente(utente).map(
+        ([chiave, valore]) => (
+          <span key={chiave}>
+            {chiave}: {String(valore)}
+          </span>
+        )
+      )}
+    </div>
+  )}
+
+  <button
+    type="button"
+    onClick={() =>
+      caricaDispositiviPush(utente.uid)
+    }
+    disabled={Boolean(
+      conteggioPushInCorso[utente.uid]
+    )}
+  >
+    {conteggioPushInCorso[utente.uid]
+      ? "Controllo..."
+      : "📱 Controlla dispositivi push"}
+  </button>
 
   {utente.role !== "admin" && (
   <>
