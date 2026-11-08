@@ -85,8 +85,6 @@ const CAMPI_UTENTE_MOSTRATI = [
   "role",
   "nickname",
   "newsletter",
-  "notifyComments",
-  "notifyLikes",
   "notifyPending",
   "notifyReports",
   "notifyNewUsers",
@@ -466,9 +464,6 @@ const [pushAttiveOnboarding, setPushAttiveOnboarding] =
 
   const [newsletter, setNewsletter] =
   useState("mai");
-  const [notifyComments, setNotifyComments] =
-useState(true);
-
 const [notifyPending, setNotifyPending] =
   useState(true);
 
@@ -486,9 +481,6 @@ const [notifyAllComments, setNotifyAllComments] =
 
 const [notifyAllLikes, setNotifyAllLikes] =
   useState(false);
-
-const [notifyLikes, setNotifyLikes] =
-useState(false);
 
   const [ultimoInvio, setUltimoInvio] =
   useState(0);
@@ -566,9 +558,6 @@ const assicuraProfiloUtente = async (currentUser) => {
       nickname: "",
 
       newsletter: "mai",
-
-      notifyComments: true,
-      notifyLikes: false,
 
       pushEnabled: false,
 
@@ -702,22 +691,6 @@ if (userSnap.exists()) {
   }
 
 const datiUtente = userSnap.data();
-
-if (
-  datiUtente.notifyComments !== undefined
-) {
-  setNotifyComments(
-    datiUtente.notifyComments
-  );
-}
-
-if (
-  datiUtente.notifyLikes !== undefined
-) {
-  setNotifyLikes(
-    datiUtente.notifyLikes
-  );
-}
 
 setNotifyPending(
   !datiUtente.adminNotificationsConfigured ||
@@ -1161,22 +1134,6 @@ if (datiUtente.nickname) {
 if (datiUtente.newsletter) {
   setNewsletter(
     datiUtente.newsletter
-  );
-}
-
-if (
-  datiUtente.notifyComments !== undefined
-) {
-  setNotifyComments(
-    datiUtente.notifyComments
-  );
-}
-
-if (
-  datiUtente.notifyLikes !== undefined
-) {
-  setNotifyLikes(
-    datiUtente.notifyLikes
   );
 }
 
@@ -2523,9 +2480,6 @@ await setDoc(
   {
   newsletter,
 
-  notifyComments,
-  notifyLikes,
-
   ...(isAdmin && {
     notifyPending,
     notifyReports,
@@ -3577,10 +3531,6 @@ return (
           <NotificationSettings
             newsletter={newsletter}
             setNewsletter={setNewsletter}
-            notifyComments={notifyComments}
-            setNotifyComments={setNotifyComments}
-            notifyLikes={notifyLikes}
-            setNotifyLikes={setNotifyLikes}
             notifyAllComments={notifyAllComments}
             setNotifyAllComments={setNotifyAllComments}
             notifyAllLikes={notifyAllLikes}
@@ -4283,16 +4233,6 @@ return (
   <p>
     <strong>Riepilogo:</strong>{" "}
     {descriviNewsletter(utente.newsletter)}
-  </p>
-
-  <p>
-    <strong>Notifiche commenti:</strong>{" "}
-    {descriviSiNo(utente.notifyComments, true)}
-  </p>
-
-  <p>
-    <strong>Notifiche like:</strong>{" "}
-    {descriviSiNo(utente.notifyLikes)}
   </p>
 
   <p>

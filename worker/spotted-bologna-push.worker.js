@@ -1658,12 +1658,6 @@ async function recuperaProfiliUtenti({
         role: valoreFirestore(fields.role),
         newsletter:
           valoreFirestore(fields.newsletter),
-        notifyComments: valoreFirestore(
-          fields.notifyComments
-        ),
-        notifyLikes: valoreFirestore(
-          fields.notifyLikes
-        ),
         notifyAllComments: valoreFirestore(
           fields.notifyAllComments
         ),
@@ -1677,9 +1671,9 @@ async function recuperaProfiliUtenti({
 /*
  * Notifica immediata di un commento o di un like.
  *
- * Destinatari: chi segue lo spotted se ha attiva la preferenza per
- * commenti o like, piu' gli amministratori che hanno attivato “tutti i
- * commenti” / “tutti i like”.
+ * Destinatari: chi segue lo spotted, sempre (se segui uno spotted vuoi
+ * sapere sia dei like sia dei commenti), piu' gli amministratori che
+ * hanno attivato “tutti i commenti” / “tutti i like”.
  */
 /*
  * Anteprima breve del testo di uno spotted, per far capire subito a
@@ -1841,11 +1835,6 @@ async function notificaAttivitaPost({
   eventId,
   testo
 }) {
-  const campoFollower =
-    type === "like"
-      ? "notifyLikes"
-      : "notifyComments";
-
   const campoAdmin =
     type === "like"
       ? "notifyAllLikes"
@@ -1919,13 +1908,9 @@ async function notificaAttivitaPost({
   for (const uid of seguaci) {
     if (uid === attore.uid) continue;
 
-    const profilo = profiloPerUid.get(uid);
-
-    if (profilo?.[campoFollower] === true) {
-      destinatari.set(uid, {
-        body: corpoFollower
-      });
-    }
+    destinatari.set(uid, {
+      body: corpoFollower
+    });
   }
 
   for (const profilo of profili) {
@@ -2289,16 +2274,34 @@ async function eseguiRiepiloghiAutomatici(env) {
     return;
   }
 
-  await eseguiRiepilogo({
-    env,
-    period: "daily"
-  });
-
-  if (giorno.toLowerCase().startsWith("dom")) {
+  /*
+   * Un errore nel riepilogo giornaliero non deve impedire quello
+   * settimanale, che la domenica parte subito dopo.
+   */
+  try {
     await eseguiRiepilogo({
       env,
-      period: "weekly"
+      period: "daily"
     });
+  } catch (errore) {
+    console.error(
+      "Riepilogo giornaliero non inviato:",
+      errore
+    );
+  }
+
+  if (giorno.toLowerCase().startsWith("dom")) {
+    try {
+      await eseguiRiepilogo({
+        env,
+        period: "weekly"
+      });
+    } catch (errore) {
+      console.error(
+        "Riepilogo settimanale non inviato:",
+        errore
+      );
+    }
   }
 }
 

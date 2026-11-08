@@ -14,12 +14,6 @@ function NotificationSettings({
   newsletter,
   setNewsletter,
 
-  notifyComments,
-  setNotifyComments,
-
-  notifyLikes,
-  setNotifyLikes,
-
   notifyPending,
   setNotifyPending,
   notifyReports,
@@ -189,32 +183,6 @@ function NotificationSettings({
               <span>Immediata</span>
             </label>
           )}
-
-          <hr />
-
-          <h3>Attività sugli spotted seguiti</h3>
-
-          <div className="notification-row">
-            <span>Commenti</span>
-
-            <input
-              type="checkbox"
-              checked={notifyComments}
-              onChange={() =>
-                setNotifyComments(!notifyComments)
-              }
-            />
-          </div>
-
-          <div className="notification-row">
-            <span>Like</span>
-
-            <input
-              type="checkbox"
-              checked={notifyLikes}
-              onChange={() => setNotifyLikes(!notifyLikes)}
-            />
-          </div>
 
           {isAdmin && (
             <>
