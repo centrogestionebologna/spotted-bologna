@@ -1782,3 +1782,123 @@ details summary {
     padding: 16px 16px 26px;
   }
 }
+
+/* Ritocchi tipografici dentro i pannelli. */
+.pannello-corpo h3 {
+  margin: 18px 0 8px;
+
+  color: #f4c542;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.pannello-corpo h3:first-child {
+  margin-top: 4px;
+}
+
+.pannello-corpo .push-notifications-box p {
+  color: #d4d4d4;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pannello-corpo .push-notifications-box button {
+  margin: 10px 0 2px;
+  padding: 9px 16px;
+
+  font-size: 13px;
+}
+
+.pannello-corpo .push-notifications-message {
+  margin-top: 8px;
+
+  font-size: 13px;
+}
+
+.pannello-corpo .newsletter-option {
+  margin: 6px 0;
+}
+
+.pannello-corpo .newsletter-option span {
+  color: #e8e8e8;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.pannello-corpo .newsletter-option input {
+  flex: 0 0 18px;
+
+  width: 18px;
+  height: 18px;
+}
+
+.pannello-corpo .notification-row {
+  justify-content: space-between;
+  gap: 12px;
+
+  margin: 0;
+  padding: 10px 0;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pannello-corpo .notification-row:last-of-type {
+  border-bottom: 0;
+}
+
+.pannello-corpo .notification-row span {
+  color: #e8e8e8;
+  font-size: 14.5px;
+}
+
+.pannello-corpo .notification-row input {
+  flex: 0 0 20px;
+
+  width: 20px;
+  height: 20px;
+}
+
+.pannello-corpo .save-notification-btn {
+  margin-top: 18px;
+  padding: 10px 18px;
+
+  font-size: 13px;
+}
+
+.pannello-corpo .notifications-head h3 {
+  margin: 0;
+}
+
+.pannello-corpo .notifications-head button {
+  padding: 8px 14px;
+
+  font-size: 12px;
+}
+
+.pannello-corpo .notification-card strong {
+  font-size: 14px;
+}
+
+.pannello-corpo .notification-card p {
+  margin: 4px 0 6px;
+
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.pannello-corpo .notification-card small {
+  color: #a9a9a9;
+  font-size: 11.5px;
+}
+
+.pannello-corpo .notifications-show-more {
+  padding: 8px 14px;
+
+  font-size: 12px;
+}
+
+.pannello-corpo hr {
+  margin: 18px 0;
+}
