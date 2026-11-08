@@ -37,6 +37,7 @@ import {
   aggiornaConteggioIscrittiServer,
   notificaAttivitaPost,
   notificaAmministratoriServer,
+  notificaNuovoPending,
   notificaComunicazioneServizio,
   notificaSbloccoGruppo,
   approvaCambioNickname
@@ -1396,6 +1397,19 @@ const inviaSpotted = async () => {
         pendingRef.id
       );
 
+      /*
+       * La notifica agli amministratori la manda il Worker: cosi'
+       * arriva anche se in quel momento nessun admin ha l'app aperta.
+       */
+      notificaNuovoPending(pendingRef.id).catch(
+        (erroreNotifica) => {
+          console.warn(
+            "Spotted in moderazione, notifica non inviata:",
+            erroreNotifica
+          );
+        }
+      );
+
       if (isAdmin) {
         caricaPendingPosts();
       }
@@ -1707,6 +1721,15 @@ const inviaPropostaGruppo = async () => {
       console.log(
         "Proposta pending creata:",
         pendingRef.id
+      );
+
+      notificaNuovoPending(pendingRef.id).catch(
+        (erroreNotifica) => {
+          console.warn(
+            "Proposta in moderazione, notifica non inviata:",
+            erroreNotifica
+          );
+        }
       );
 
       if (isAdmin) {

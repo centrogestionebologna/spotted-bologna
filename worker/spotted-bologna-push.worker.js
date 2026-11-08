@@ -2765,7 +2765,7 @@ if (
     const amministratoriAbilitati =
       amministratori.filter(
         (admin) =>
-          admin.notifyPending === true
+          admin.notifyPending !== false
       );
 
     let notificheInterneCreate = 0;
@@ -2776,49 +2776,54 @@ if (
       const admin
       of amministratoriAbilitati
     ) {
-      await creaNotificaInterna({
-        env,
-        accessToken,
-        userId: admin.uid,
-        type: "pending",
-        title:
-          "📩 Nuovo spotted pending",
-        body:
-          "Richiede approvazione",
-        postId: pendingPostId
-      });
+      /*
+       * Stesso ID della notifica che l'app crea dal browser
+       * dell'admin: chi arriva secondo prende un 409 e non duplica.
+       */
+      const notificaInterna =
+        await creaNotificaInterna({
+          env,
+          accessToken,
+          userId: admin.uid,
+          type: "pending",
+          title:
+            "📩 Nuovo spotted pending",
+          body:
+            "Richiede approvazione",
+          postId: pendingPostId,
+          notificationId:
+            `pending_${pendingPostId}_${admin.uid}`
+        });
+
+      if (!notificaInterna) continue;
 
       notificheInterneCreate += 1;
 
       /*
-       * La push immediata viene inviata soltanto
-       * agli admin con frequenza "immediata".
+       * La push non dipende dalla frequenza dei riepiloghi:
+       * una moderazione in attesa va segnalata subito.
        */
-      if (
-        admin.newsletter === "immediata"
-      ) {
-        const risultatoPush =
-          await inviaPushAUtente({
-            env,
-            recipientUserId:
-              admin.uid,
-            title:
-              "📩 Nuovo spotted pending",
-            body:
-              "Un nuovo spotted richiede approvazione.",
-            url: "/",
-            notificationId:
-              `pending_${pendingPostId}`,
-            postId:
-              pendingPostId
-          });
+      const risultatoPush =
+        await inviaPushAUtente({
+          env,
+          recipientUserId:
+            admin.uid,
+          title:
+            "📩 Nuovo spotted pending",
+          body:
+            "Un nuovo spotted richiede approvazione.",
+          url: "/",
+          notificationId:
+            `pending_${pendingPostId}`,
+          postId:
+            pendingPostId
+        });
 
-        pushInviate +=
-          risultatoPush.sent;
+      pushInviate +=
+        risultatoPush.sent;
 
-        pushFallite +=
-          risultatoPush.failed;
-      }
+      pushFallite +=
+        risultatoPush.failed;
     }
 
     return rispostaJson(
@@ -3026,7 +3031,7 @@ if (
     const amministratoriAbilitati =
       amministratori.filter(
         (admin) =>
-          admin.notifyReports === true
+          admin.notifyReports !== false
       );
 
     let notificheInterneCreate = 0;
@@ -3051,31 +3056,26 @@ if (
 
       notificheInterneCreate += 1;
 
-      if (
-        admin.newsletter ===
-        "immediata"
-      ) {
-        const risultatoPush =
-          await inviaPushAUtente({
-            env,
-            recipientUserId:
-              admin.uid,
-            title:
-              "🚩 Spotted segnalato",
-            body:
-              "Uno spotted ha raggiunto 3 segnalazioni e richiede moderazione.",
-            url: "/",
-            notificationId:
-              `report_${pendingPostId}`,
-            postId: originalId
-          });
+      const risultatoPush =
+        await inviaPushAUtente({
+          env,
+          recipientUserId:
+            admin.uid,
+          title:
+            "🚩 Spotted segnalato",
+          body:
+            "Uno spotted ha raggiunto 3 segnalazioni e richiede moderazione.",
+          url: "/",
+          notificationId:
+            `report_${pendingPostId}`,
+          postId: originalId
+        });
 
-        pushInviate +=
-          risultatoPush.sent;
+      pushInviate +=
+        risultatoPush.sent;
 
-        pushFallite +=
-          risultatoPush.failed;
-      }
+      pushFallite +=
+        risultatoPush.failed;
     }
 
     return rispostaJson(
@@ -3266,7 +3266,7 @@ if (
     const amministratoriAbilitati =
       amministratori.filter(
         (admin) =>
-          admin.notifyNewUsers === true &&
+          admin.notifyNewUsers !== false &&
           admin.uid !== identita.uid
       );
 
@@ -3304,40 +3304,35 @@ if (
         );
       }
 
-      if (
-        admin.newsletter ===
-        "immediata"
-      ) {
-        try {
-          const risultatoPush =
-            await inviaPushAUtente({
-              env,
-              recipientUserId:
-                admin.uid,
-              title:
-                "👤 Nuovo iscritto",
-              body:
-                `${descrizioneUtente} si è registrato.`,
-              url: "/",
-              notificationId:
-                `newUser_${identita.uid}`,
-              postId: ""
-            });
+      try {
+        const risultatoPush =
+          await inviaPushAUtente({
+            env,
+            recipientUserId:
+              admin.uid,
+            title:
+              "👤 Nuovo iscritto",
+            body:
+              `${descrizioneUtente} si è registrato.`,
+            url: "/",
+            notificationId:
+              `newUser_${identita.uid}`,
+            postId: ""
+          });
 
-          pushInviate +=
-            risultatoPush.sent;
+        pushInviate +=
+          risultatoPush.sent;
 
-          pushFallite +=
-            risultatoPush.failed;
-        } catch (errorePush) {
-          pushFallite += 1;
+        pushFallite +=
+          risultatoPush.failed;
+      } catch (errorePush) {
+        pushFallite += 1;
 
-          console.error(
-            "Push nuovo utente fallita per",
-            admin.uid,
-            errorePush
-          );
-        }
+        console.error(
+          "Push nuovo utente fallita per",
+          admin.uid,
+          errorePush
+        );
       }
     }
 
