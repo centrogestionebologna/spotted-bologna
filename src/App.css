@@ -673,36 +673,6 @@ body {
   }
 }
 
-.login-banner{
-  margin-top:15px;
-
-  color:#f4c542;
-
-  font-size:18px;
-
-  font-weight:800;
-
-  text-shadow:0 0 10px rgba(244,197,66,.4);
-
-  animation:bounceArrow 1.5s infinite;
-}
-
-@keyframes bounceArrow{
-
-  0%{
-    transform:translateY(0);
-  }
-
-  50%{
-    transform:translateY(-6px);
-  }
-
-  100%{
-    transform:translateY(0);
-  }
-
-}
-
 .notification-row{
   display:flex;
   align-items:center;
@@ -1335,4 +1305,294 @@ details summary {
   50% {
     box-shadow: 0 0 4px rgba(245, 197, 66, 0.15);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Marchio, accesso e intestazione compatta                           */
+/* ------------------------------------------------------------------ */
+
+/* Il cuore sta al centro, sopra le due parole del nome. */
+.spotted-logo--header {
+  align-items: center;
+}
+
+.spotted-logo--login .spotted-logo-heart {
+  font-size: 32px;
+
+  margin-bottom: 9px;
+}
+
+.spotted-logo--login .spotted-logo-word {
+  font-size: 30px;
+  letter-spacing: 1.6px;
+}
+
+.spotted-logo--login .spotted-logo-official {
+  margin-top: 7px;
+
+  font-size: 10px;
+  letter-spacing: 5px;
+}
+
+/* Accesso: una sola scheda centrata, senza scritte urlate. */
+.login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+
+  max-width: 420px;
+  margin: 46px auto 30px;
+  padding: 34px 26px 30px;
+
+  text-align: center;
+
+  background: rgba(14, 14, 14, 0.72);
+  border: 1px solid rgba(244, 197, 66, 0.22);
+  border-radius: 28px;
+
+  box-shadow:
+    0 22px 50px rgba(0, 0, 0, 0.35);
+
+  backdrop-filter: blur(6px);
+}
+
+.login-tagline {
+  margin-top: -4px;
+
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.login-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  width: 100%;
+  padding: 14px 22px;
+
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1d1d1d;
+
+  font-size: 16px;
+  font-weight: 800;
+
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.28);
+
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.login-google:hover {
+  transform: translateY(-1px);
+
+  box-shadow:
+    0 16px 30px rgba(0, 0, 0, 0.32);
+}
+
+.login-google:active {
+  transform: none;
+}
+
+.login-google-badge {
+  display: grid;
+  place-items: center;
+
+  width: 26px;
+  height: 26px;
+
+  border-radius: 50%;
+  background: #4285f4;
+  color: #ffffff;
+
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.login-note {
+  max-width: 34ch;
+
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* Intestazione su una sola riga: marchio, nickname, campanella, esci. */
+.header {
+  flex-wrap: nowrap;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.header-left {
+  flex: 0 0 auto;
+}
+
+.header-right {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 8px;
+
+  min-width: 0;
+}
+
+.header-right > .nickname-badge {
+  flex: 0 1 auto;
+
+  width: auto;
+  min-width: 0;
+  max-width: 240px;
+
+  padding: 7px 15px;
+
+  font-size: 13px;
+  line-height: 1.25;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-right > .notification-btn {
+  flex: 0 0 34px;
+
+  width: 34px;
+  height: 34px;
+
+  font-size: 15px;
+}
+
+.header-right > .logout-btn {
+  flex: 0 0 auto;
+
+  padding: 8px 16px;
+
+  font-size: 13px;
+}
+
+@media (min-width: 769px) {
+  .app-container {
+    padding: 18px 20px 32px;
+  }
+
+  .section-card {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .header {
+    flex-wrap: nowrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .header-left {
+    width: auto;
+    text-align: left;
+  }
+
+  .header-right {
+    width: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .header-right > .nickname-badge {
+    flex: 1 1 auto;
+
+    width: auto;
+    max-width: none;
+
+    padding: 6px 12px;
+
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .header-right > .notification-btn {
+    flex: 0 0 30px;
+
+    width: 30px;
+    height: 30px;
+
+    font-size: 14px;
+  }
+
+  .header-right > .logout-btn {
+    padding: 7px 13px;
+
+    font-size: 12px;
+  }
+
+  .spotted-logo--header .spotted-logo-word {
+    font-size: 15px;
+    letter-spacing: 1.1px;
+  }
+
+  .spotted-logo--header .spotted-logo-heart {
+    font-size: 12px;
+
+    margin-bottom: 2px;
+  }
+
+  .spotted-logo--header .spotted-logo-official {
+    font-size: 6.5px;
+    letter-spacing: 2.6px;
+  }
+
+  .login-card {
+    margin: 26px auto 22px;
+    padding: 28px 20px 24px;
+    border-radius: 24px;
+  }
+}
+
+@media (max-width: 380px) {
+  .header {
+    gap: 8px;
+  }
+
+  .header-right > .nickname-badge {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .header-right > .logout-btn {
+    padding: 6px 11px;
+    font-size: 11px;
+  }
+
+  .login-card {
+    padding: 24px 16px 22px;
+  }
+}
+
+/* Scheda profilo: nickname, iscritti e “modifica” sulla stessa riga. */
+.profile-nickname-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-iscritti {
+  padding: 3px 10px;
+
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+
+  color: #c9c9c9;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
 }

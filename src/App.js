@@ -3458,6 +3458,7 @@ const pushGiaAttive =
 return (
   <div className="app-container">
 
+    {user && (
     <Header
   nickname={savedNickname}
   logout={logout}      unreadNotifications={
@@ -3470,7 +3471,8 @@ return (
     });
     document.getElementById("profile-notifications")?.setAttribute("open", "true");
   }}
-/>
+    />
+    )}
 {user && savedNickname && !passoNotifiche && (
   <>      <ProfileCard
       nickname={savedNickname}
@@ -3510,24 +3512,35 @@ return (
 )}
 
     {!user && (
-      <div
-  style={{
-    marginBottom: "35px"
-  }}
->
-  <button onClick={loginGoogle}>
-    Accedi con Google
-  </button>
+  <div className="login-card">
 
-<div className="login-banner">
-  ⬆️ ACCEDI CON GOOGLE
-  <br />
-  <span>
-  Accedi e sblocca le nostre funzioni aggiuntive social e di gruppo 🚀
-  </span>
-</div>
+    <Logo variant="login" />
 
-</div>
+    <p className="login-tagline">
+      Gli spotted di Bologna, in forma anonima.
+    </p>
+
+    <button
+      type="button"
+      className="login-google"
+      onClick={loginGoogle}
+    >
+      <span
+        className="login-google-badge"
+        aria-hidden="true"
+      >
+        G
+      </span>
+      Accedi con Google
+    </button>
+
+    <p className="login-note">
+      Accedi per commentare, mettere like
+      e sbloccare le funzioni social e di
+      gruppo.
+    </p>
+
+  </div>
     )}
 
 {user && !savedNickname && (

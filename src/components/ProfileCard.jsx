@@ -145,6 +145,10 @@ const gestisciAttivazionePush = async () => {
           <strong>Nickname:</strong> {nickname}
         </span>
 
+        <span className="profile-iscritti">
+          {iscritti} iscritti
+        </span>
+
         {!mostraCambioNickname &&
           !richiestaNickname && (
             <button
@@ -234,10 +238,6 @@ const gestisciAttivazionePush = async () => {
           {messaggioCambioNickname}
         </p>
       )}
-
-      <p>
-        <strong>Iscritti:</strong> {iscritti}
-      </p>
 
       <details className="notification-dropdown">
 

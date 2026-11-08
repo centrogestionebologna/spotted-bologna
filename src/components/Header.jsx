@@ -18,52 +18,42 @@ function Header({
         </h1>
       </div>
 
-<div className="header-right">
+      {nickname && (
+        <div className="header-right">
 
-  {nickname && (
-    <>
-      <div className="nickname-badge">
-        {nickname}
-      </div>
+          <div
+            className="nickname-badge"
+            title={nickname}
+          >
+            {nickname}
+          </div>
 
-<div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: "15px"
-  }}
->
+          <button
+            type="button"
+            className="notification-btn"
+            aria-label="Apri notifiche"
+            onClick={onNotificationsClick}
+          >
+            🔔
+            {unreadNotifications > 0 && (
+              <span className="notification-badge">
+                {unreadNotifications}
+              </span>
+            )}
+          </button>
 
-  <button
-    type="button"
-    className="notification-btn"
-    aria-label="Apri notifiche"
-    onClick={onNotificationsClick}
-  >
-    🔔
-    {unreadNotifications > 0 && (
-      <span className="notification-badge">
-        {unreadNotifications}
-      </span>
-    )}
-  </button>
+          <button
+            type="button"
+            className="logout-btn"
+            onClick={logout}
+          >
+            Esci
+          </button>
 
-  <button
-        className="logout-btn"
-        onClick={logout}
-      >
-        Esci
-      </button>
-
-</div>
-
-    </>
-  )}
-
-</div>
+        </div>
+      )}
 
     </div>
-
   );
 }
 
