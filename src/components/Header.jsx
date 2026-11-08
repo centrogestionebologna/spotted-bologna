@@ -4,6 +4,7 @@ function Header({
   nickname,
   logout,
   unreadNotifications,
+  onNicknameClick,
   onNotificationsClick
 }) {
   return (
@@ -21,12 +22,15 @@ function Header({
       {nickname && (
         <div className="header-right">
 
-          <div
+          <button
+            type="button"
             className="nickname-badge"
-            title={nickname}
+            title="Impostazioni nickname"
+            aria-label="Apri le impostazioni del nickname"
+            onClick={onNicknameClick}
           >
             {nickname}
-          </div>
+          </button>
 
           <button
             type="button"

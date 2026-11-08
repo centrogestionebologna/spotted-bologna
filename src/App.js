@@ -4,7 +4,8 @@ import Header from "./components/Header";
 import Logo from "./components/Logo";
 import AdminPanel from "./components/AdminPanel";
 import Post from "./components/Post";
-import ProfileCard from "./components/ProfileCard";
+import NicknameSettings from "./components/NicknameSettings";
+import NotificationSettings from "./components/NotificationSettings";
 
 import "./App.css";
 
@@ -371,6 +372,13 @@ const [followRequestInProgress, setFollowRequestInProgress] = useState({});
 
   const [nuovaParola, setNuovaParola] =
   useState("");
+
+/*
+ * Pannello aperto dall'intestazione: "nickname" o "notifiche".
+ * Null quando nessuno dei due e' aperto.
+ */
+const [pannelloProfilo, setPannelloProfilo] =
+  useState(null);
 
 const [notifications, setNotifications] =
   useState([]);
@@ -3331,6 +3339,52 @@ const rifiutaRichiestaNickname = async (
   }
 };
 
+/*
+ * Chi non ha ancora fatto l'accesso vede comunque quanti iscritti ci
+ * sono: si legge il documento pubblico in sola lettura, senza chiamare
+ * il Worker. Se le regole Firestore non lo permettono il badge resta
+ * nascosto.
+ */
+useEffect(() => {
+  if (user) return undefined;
+
+  const unsubscribe = onSnapshot(
+    doc(db, "publicStats", "community"),
+    (snapshot) => {
+      setNumeroIscritti(
+        snapshot.exists()
+          ? Number(snapshot.data().numeroIscritti) || 0
+          : 0
+      );
+    },
+    (errore) => {
+      console.warn(
+        "Numero iscritti non disponibile:",
+        errore
+      );
+    }
+  );
+
+  return () => unsubscribe();
+}, [user]);
+
+/* Il pannello aperto si chiude con Esc, come una finestra vera. */
+useEffect(() => {
+  if (!pannelloProfilo) return undefined;
+
+  const suTasto = (evento) => {
+    if (evento.key === "Escape") {
+      setPannelloProfilo(null);
+    }
+  };
+
+  window.addEventListener("keydown", suTasto);
+
+  return () => {
+    window.removeEventListener("keydown", suTasto);
+  };
+}, [pannelloProfilo]);
+
 // Conteggio iscritti per chi non e' admin: il documento pubblico resta la
 // sorgente in tempo reale, mentre il Worker (che ha il service account) viene
 // invitato a ricalcolare il numero esatto e a riscriverlo. Ogni errore di rete
@@ -3461,54 +3515,105 @@ return (
     {user && (
     <Header
   nickname={savedNickname}
-  logout={logout}      unreadNotifications={
+  logout={logout}
+  unreadNotifications={
     unreadNotifications
   }
-  onNotificationsClick={() => {
-    document.getElementById("profile-notifications")?.scrollIntoView({
-      behavior: "smooth",
-      block: "center"
-    });
-    document.getElementById("profile-notifications")?.setAttribute("open", "true");
-  }}
+  onNicknameClick={() =>
+    setPannelloProfilo("nickname")
+  }
+  onNotificationsClick={() =>
+    setPannelloProfilo("notifiche")
+  }
     />
     )}
-{user && savedNickname && !passoNotifiche && (
-  <>      <ProfileCard
-      nickname={savedNickname}
-      iscritti={isAdmin ? utenti.length : numeroIscritti}
-      newsletter={newsletter}
-      setNewsletter={setNewsletter}
-      notifyComments={notifyComments}
-      setNotifyComments={setNotifyComments}
-      notifyLikes={notifyLikes}
-      setNotifyLikes={setNotifyLikes}
-      notifyAllComments={notifyAllComments}
-      setNotifyAllComments={setNotifyAllComments}
-      notifyAllLikes={notifyAllLikes}
-      setNotifyAllLikes={setNotifyAllLikes}
-      notifyPending={notifyPending}
-      setNotifyPending={setNotifyPending}
-      notifyReports={notifyReports}
-      setNotifyReports={setNotifyReports}
-      notifyNewUsers={notifyNewUsers}
-      setNotifyNewUsers={setNotifyNewUsers}
-      notifyNewPosts={notifyNewPosts}
-      setNotifyNewPosts={setNotifyNewPosts}
-      salvaNewsletter={salvaNewsletter}
-      isAdmin={isAdmin}
-      notifications={notifications}
-      nonLette={nonLette}
-      markAllNotificationsRead={markAllNotificationsRead}
-      apriSpotted={apriSpotted}
-      richiestaNickname={richiestaNickname}
-      richiediCambioNickname={richiediCambioNickname}
-      richiestaNicknameInCorso={
-        richiestaNicknameInCorso
-      }
-    />
+{user && savedNickname && pannelloProfilo && (
+  <div
+    className="pannello-sfondo"
+    role="presentation"
+    onClick={() => setPannelloProfilo(null)}
+  >
+    <div
+      className="pannello"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pannello-titolo"
+      onClick={(evento) => evento.stopPropagation()}
+    >
 
-  </>
+      <div className="pannello-testa">
+
+        <h2 id="pannello-titolo">
+          {pannelloProfilo === "nickname"
+            ? "✏️ Il tuo nickname"
+            : "🔔 Notifiche"}
+        </h2>
+
+        <button
+          type="button"
+          className="pannello-chiudi"
+          aria-label="Chiudi"
+          onClick={() => setPannelloProfilo(null)}
+        >
+          ×
+        </button>
+
+      </div>
+
+      <div className="pannello-corpo">
+
+        {pannelloProfilo === "nickname" ? (
+          <NicknameSettings
+            nickname={savedNickname}
+            richiestaNickname={richiestaNickname}
+            richiediCambioNickname={
+              richiediCambioNickname
+            }
+            richiestaNicknameInCorso={
+              richiestaNicknameInCorso
+            }
+          />
+        ) : (
+          <NotificationSettings
+            newsletter={newsletter}
+            setNewsletter={setNewsletter}
+            notifyComments={notifyComments}
+            setNotifyComments={setNotifyComments}
+            notifyLikes={notifyLikes}
+            setNotifyLikes={setNotifyLikes}
+            notifyAllComments={notifyAllComments}
+            setNotifyAllComments={setNotifyAllComments}
+            notifyAllLikes={notifyAllLikes}
+            setNotifyAllLikes={setNotifyAllLikes}
+            notifyPending={notifyPending}
+            setNotifyPending={setNotifyPending}
+            notifyReports={notifyReports}
+            setNotifyReports={setNotifyReports}
+            notifyNewUsers={notifyNewUsers}
+            setNotifyNewUsers={setNotifyNewUsers}
+            notifyNewPosts={notifyNewPosts}
+            setNotifyNewPosts={setNotifyNewPosts}
+            salvaNewsletter={salvaNewsletter}
+            isAdmin={isAdmin}
+            notifications={notifications}
+            nonLette={nonLette}
+            markAllNotificationsRead={
+              markAllNotificationsRead
+            }
+            apriSpotted={(postId) => {
+              setPannelloProfilo(null);
+
+              if (typeof apriSpotted === "function") {
+                apriSpotted(postId);
+              }
+            }}
+          />
+        )}
+
+      </div>
+
+    </div>
+  </div>
 )}
 
     {!user && (
@@ -3519,6 +3624,17 @@ return (
     <p className="login-tagline">
       Gli spotted di Bologna, in forma anonima.
     </p>
+
+    {numeroIscritti > 0 && (
+      <div className="login-iscritti">
+        <strong>{numeroIscritti}</strong>
+        <span>
+          {numeroIscritti === 1
+            ? "persona già dentro"
+            : "persone già dentro"}
+        </span>
+      </div>
+    )}
 
     <button
       type="button"
