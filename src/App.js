@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import Header from "./components/Header";
+import Logo from "./components/Logo";
 import AdminPanel from "./components/AdminPanel";
 import Post from "./components/Post";
 import ProfileCard from "./components/ProfileCard";
@@ -3438,12 +3439,7 @@ useEffect(() => {
 if (!avvioConcluso) {
   return (
     <div className="splash-screen">
-      <div className="splash-logo">
-        <span className="splash-heart">♥</span>
-        <span className="splash-word">SPOTTED</span>
-        <span className="splash-word">BOLOGNA</span>
-        <span className="splash-official">OFFICIAL</span>
-      </div>
+      <Logo variant="splash" />
       <div className="splash-bar">
         <span />
       </div>

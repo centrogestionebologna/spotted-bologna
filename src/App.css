@@ -1056,15 +1056,14 @@ details summary {
   text-align: center;
 }
 
-.splash-logo {
+/* Marchio condiviso: caricamento, accesso e feed usano lo stesso logo. */
+.spotted-logo {
   display: flex;
   flex-direction: column;
   align-items: center;
-
-  animation: splash-appari 520ms ease-out both;
 }
 
-.splash-heart {
+.spotted-logo-heart {
   color: #ed3345;
   font-size: 46px;
   line-height: 1;
@@ -1072,7 +1071,7 @@ details summary {
   margin-bottom: 10px;
 }
 
-.splash-word {
+.spotted-logo-word {
   color: #ffffff;
   font-size: 40px;
   font-weight: 900;
@@ -1080,13 +1079,44 @@ details summary {
   line-height: 1.08;
 }
 
-.splash-official {
+.spotted-logo-official {
   margin-top: 8px;
 
   color: rgba(255, 255, 255, 0.72);
   font-size: 13px;
   font-weight: 300;
   letter-spacing: 6px;
+}
+
+.spotted-logo--splash {
+  animation: splash-appari 520ms ease-out both;
+}
+
+.spotted-logo--header {
+  align-items: flex-start;
+}
+
+.spotted-logo--header .spotted-logo-heart {
+  font-size: 15px;
+
+  margin-bottom: 3px;
+}
+
+.spotted-logo--header .spotted-logo-word {
+  font-size: 18px;
+  letter-spacing: 1.4px;
+  line-height: 1.1;
+}
+
+.spotted-logo--header .spotted-logo-official {
+  margin-top: 3px;
+
+  font-size: 8px;
+  letter-spacing: 3.4px;
+}
+
+.header-logo {
+  display: block;
 }
 
 .splash-bar {
@@ -1140,7 +1170,7 @@ details summary {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .splash-logo,
+  .spotted-logo--splash,
   .splash-bar span {
     animation: none;
   }

@@ -1,3 +1,5 @@
+import Logo from "./Logo";
+
 function Header({
   nickname,
   logout,
@@ -8,8 +10,11 @@ function Header({
     <div className="header">
 
       <div className="header-left">
-        <h1>
-          SPOTTED BOLOGNA OFFICIAL
+        <h1
+          className="header-logo"
+          aria-label="Spotted Bologna Official"
+        >
+          <Logo variant="header" />
         </h1>
       </div>
 
