@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Header from "./components/Header";
 import Logo from "./components/Logo";
 import AdminPanel from "./components/AdminPanel";
+import CommunityDashboard from "./components/CommunityDashboard";
 import Post from "./components/Post";
 import NicknameSettings from "./components/NicknameSettings";
 import NotificationSettings from "./components/NotificationSettings";
@@ -367,8 +368,7 @@ const [followRequestInProgress, setFollowRequestInProgress] = useState({});
   postScreenshotVisibili,
   setPostScreenshotVisibili
   ] = useState(3); 
-  const [utentiVisibili, setUtentiVisibili] =
-  useState(3);
+
   const [paroleVietate, setParoleVietate] =
   useState([]);
 
@@ -514,8 +514,7 @@ const [linkGruppoEdit, setLinkGruppoEdit] =
 
 
   const [isAdmin, setIsAdmin] = useState(false);
-  const [ricercaUtente, setRicercaUtente] =
-    useState("");
+
   const [ricercaSpotted, setRicercaSpotted] =
   useState("");
   const [spottedText, setSpottedText] = useState("");
@@ -4222,290 +4221,32 @@ return (
     👥 Dashboard Community
   </summary>
 
-<div>
-
-  <button
-    onClick={toggleApprovalPosts}
-  >
-    {approvalEnabledPosts
-      ? "📝 Spotted: approvazione attiva"
-      : "📝 Spotted: pubblicazione automatica"}
-  </button>
-
-  <button
-    onClick={toggleApprovalGroups}
-    style={{
-      marginLeft: "10px"
-    }}
-  >
-    {approvalEnabledGroups
-      ? "📚 Gruppi: approvazione attiva"
-      : "📚 Gruppi: pubblicazione automatica"}
-  </button>
-
-</div>
-
-      <div className="stats-grid">
-
-  <div className="stat-card">
-    <h3>👥 Utenti</h3>
-    <div className="stat-number">
-      {utenti.length}
-    </div>
-  </div>
-
-  <div className="stat-card">
-    <h3>📝 Spotted</h3>
-    <div className="stat-number">
-      {posts.length}
-    </div>
-  </div>
-
-  <div className="stat-card">
-    <h3>❤️ Like</h3>
-    <div className="stat-number">
-      {likes.length}
-    </div>
-  </div>
-
-  <div className="stat-card">
-    <h3>💬 Commenti</h3>
-    <div className="stat-number">
-      {comments.length}
-    </div>
-  </div>
-
-</div>
-
-<details>
-  <summary>🚫 Parole vietate</summary>
-
-  <input
-    type="text"
-    placeholder="Nuova parola vietata"
-    value={nuovaParola}
-    onChange={(e) =>
-      setNuovaParola(e.target.value)
-    }
+  <CommunityDashboard
+    utenti={utenti}
+    posts={posts}
+    comments={comments}
+    likes={likes}
+    postFollowers={postFollowers}
+    pendingPosts={pendingPosts}
+    richiesteNickname={richiesteNickname}
+    approvalEnabledPosts={approvalEnabledPosts}
+    approvalEnabledGroups={approvalEnabledGroups}
+    toggleApprovalPosts={toggleApprovalPosts}
+    toggleApprovalGroups={toggleApprovalGroups}
+    paroleVietate={paroleVietate}
+    nuovaParola={nuovaParola}
+    setNuovaParola={setNuovaParola}
+    aggiungiParolaVietata={aggiungiParolaVietata}
+    eliminaParolaVietata={eliminaParolaVietata}
+    dispositiviPush={dispositiviPush}
+    conteggioPushInCorso={conteggioPushInCorso}
+    caricaDispositiviPush={caricaDispositiviPush}
+    toggleBan={toggleBan}
+    eliminaUtente={eliminaUtente}
+    descriviNewsletter={descriviNewsletter}
+    descriviSiNo={descriviSiNo}
+    altriDatiUtente={altriDatiUtente}
   />
-
-  <button
-    onClick={aggiungiParolaVietata}
-  >
-    Aggiungi
-  </button>
-
-  {paroleVietate.map((parola) => (
-    <div key={parola.id}>
-      {parola.word}
-
-      <button
-        onClick={() =>
-          eliminaParolaVietata(
-            parola.id
-          )
-        }
-      >
-        Elimina
-      </button>
-    </div>
-  ))}
-
-</details>
-
-<details><summary>
-👥 Utenti ({utenti.length})
-</summary>
-
-<input
-  type="text"
-  placeholder="Cerca nickname o email..."
-  value={ricercaUtente}
-  onChange={(e) =>
-    setRicercaUtente(e.target.value)
-  }
-/>
-      {utenti
-  .filter((utente) => {
-
-    const ricerca =
-      ricercaUtente.toLowerCase();
-
-    return (
-      (utente.nickname || "")
-        .toLowerCase()
-        .includes(ricerca) ||
-
-      (utente.email || "")
-        .toLowerCase()
-        .includes(ricerca)
-    );
-  })
-  .slice(0, utentiVisibili)
-  .map((utente) => (
-        <div
-  key={utente.id}
-  className="user-card"
->
-  <p>
-    <strong>Nickname:</strong>{" "}
-    {utente.nickname || "Non impostato"}
-  </p>
-
-  <p>
-    <strong>Nome Google:</strong>{" "}
-    {utente.name || "—"}
-  </p>
-
-  <p>
-    <strong>Email:</strong>{" "}
-    {utente.email || "—"}
-  </p>
-
-  <p>
-    <strong>Ruolo:</strong>{" "}
-    {utente.role || "user"}
-  </p>
-
-  <p>
-    <strong>Stato:</strong>{" "}
-    {utente.banned
-      ? "🔴 Bannato"
-      : "🟢 Attivo"}
-  </p>
-
-  <p>
-    <strong>Registrato il:</strong>{" "}
-    {utente.createdAt
-  ? new Date(
-      utente.createdAt
-    ).toLocaleString("it-IT")
-  : "—"}
-  </p>
-
-  <p>
-    <strong>Riepilogo:</strong>{" "}
-    {descriviNewsletter(utente.newsletter)}
-  </p>
-
-  <p>
-    <strong>Preferenze notifiche impostate:</strong>{" "}
-    {descriviSiNo(utente.notificheImpostate)}
-  </p>
-
-  {utente.role === "admin" && (
-    <p>
-      <strong>Notifiche admin:</strong>{" "}
-      pending {descriviSiNo(utente.notifyPending, true)}
-      {" · "}segnalazioni {descriviSiNo(utente.notifyReports, true)}
-      {" · "}nuovi iscritti {descriviSiNo(utente.notifyNewUsers, true)}
-      {" · "}nuovi post {descriviSiNo(utente.notifyNewPosts, true)}
-      {" · "}tutti i commenti {descriviSiNo(utente.notifyAllComments)}
-      {" · "}tutti i like {descriviSiNo(utente.notifyAllLikes)}
-    </p>
-  )}
-
-  <p>
-    <strong>Dispositivi con push:</strong>{" "}
-    {dispositiviPush[utente.uid] === undefined
-      ? "non verificato"
-      : dispositiviPush[utente.uid] === null
-      ? "non disponibile"
-      : dispositiviPush[utente.uid]}
-  </p>
-
-  <p>
-    <strong>Attività:</strong>{" "}
-    {posts.filter(
-      (post) => (post.authorId || "") === utente.uid
-    ).length}{" spotted · "}
-    {comments.filter(
-      (commento) => commento.userId === utente.uid
-    ).length}{" commenti · "}
-    {likes.filter(
-      (like) => like.userId === utente.uid
-    ).length}{" like · "}
-    {postFollowers.filter(
-      (follow) => follow.userId === utente.uid
-    ).length}{" spotted seguiti"}
-  </p>
-
-  <p>
-    <strong>UID:</strong>{" "}
-    <code>{utente.uid || utente.id}</code>
-  </p>
-
-  {altriDatiUtente(utente).length > 0 && (
-    <div className="user-card-extra">
-      <strong>Altri dati</strong>
-
-      {altriDatiUtente(utente).map(
-        ([chiave, valore]) => (
-          <span key={chiave}>
-            {chiave}: {String(valore)}
-          </span>
-        )
-      )}
-    </div>
-  )}
-
-  <button
-    type="button"
-    onClick={() =>
-      caricaDispositiviPush(utente.uid)
-    }
-    disabled={Boolean(
-      conteggioPushInCorso[utente.uid]
-    )}
-  >
-    {conteggioPushInCorso[utente.uid]
-      ? "Controllo..."
-      : "📱 Controlla dispositivi push"}
-  </button>
-
-  {utente.role !== "admin" && (
-  <>
-    <button
-      onClick={() =>
-        toggleBan(
-          utente.uid,
-          utente.banned
-        )
-      }
-    >
-      {utente.banned
-        ? "✅ Sblocca"
-        : "🚫 Banna"}
-    </button>
-
-    <button
-      onClick={() =>
-  eliminaUtente(utente.id)
-      }
-      style={{
-        marginLeft: "10px"
-      }}
-    >
-      🗑 Elimina
-    </button>
-  </>
-)}
-
-</div>
-      ))}
-
-{utenti.length > utentiVisibili && (
-  <button
-    onClick={() =>
-      setUtentiVisibili(
-        utentiVisibili + 3
-      )
-    }
-  >
-    Mostra altri
-  </button>
-)}
-    </details>
 
 </details>
 
