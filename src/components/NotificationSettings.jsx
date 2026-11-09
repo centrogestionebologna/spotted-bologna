@@ -107,11 +107,15 @@ function NotificationSettings({
       const risultato =
         await verificaNotifichePush();
 
+      const totale =
+        risultato.totalDevices ||
+        risultato.sent;
+
       setMessaggioVerificaPush(
-        `✅ Notifica di prova inviata a ${risultato.sent} ${
-          risultato.sent === 1
-            ? "dispositivo"
-            : "dispositivi"
+        `✅ Notifica di prova inviata${
+          totale > 1
+            ? ` (${risultato.sent} su ${totale} dispositivi)`
+            : ""
         }. Controlla la notifica sul dispositivo.`
       );
     } catch (errore) {

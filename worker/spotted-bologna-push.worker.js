@@ -529,23 +529,12 @@ async function inviaPush({
       : null;
 
   /*
-   * Il tag fa sovrascrivere al sistema la stessa notifica invece di
-   * impilarne una copia: se un invio viene ripetuto, il destinatario
-   * la vede comunque una sola volta.
+   * Messaggio volutamente data-only: la notifica viene mostrata dal
+   * service worker con showNotification. Affidarsi alla visualizzazione
+   * automatica del payload "notification" lascia alcuni telefoni,
+   * soprattutto iOS/PWA, senza avviso pur avendo ricevuto la push.
    */
-  const notificaWeb = {
-    icon: "/logo192.png",
-    badge: "/logo192.png"
-  };
-
-  if (notificationId) {
-    notificaWeb.tag = notificationId;
-    notificaWeb.renotify = false;
-  }
-
   const webpush = {
-    notification: notificaWeb,
-
     /*
      * Urgenza alta: con la priorita' normale Android puo' rimandare
      * la consegna finche' il telefono non esce dalla modalita' doze,
@@ -568,12 +557,9 @@ async function inviaPush({
     message: {
       token,
 
-      notification: {
-        title,
-        body
-      },
-
       data: {
+        title,
+        body,
         url: linkSicuro || "/",
         notificationId:
           notificationId || "",

@@ -1331,11 +1331,15 @@ const verificaNotificheOnboarding = async () => {
     const risultato = await verificaNotifichePush();
 
     setPushAttiveOnboarding(true);
+    const totale =
+      risultato.totalDevices ||
+      risultato.sent;
+
     setMessaggioVerificaPushOnboarding(
-      `✅ Notifica di prova inviata a ${risultato.sent} ${
-        risultato.sent === 1
-          ? "dispositivo"
-          : "dispositivi"
+      `✅ Notifica di prova inviata${
+        totale > 1
+          ? ` (${risultato.sent} su ${totale} dispositivi)`
+          : ""
       }. Controlla la notifica sul dispositivo.`
     );
   } catch (errore) {
@@ -3515,9 +3519,35 @@ useEffect(() => {
  * succedeva al telefono, senza mostrare nessun errore.
  */
 useEffect(() => {
-  if (!user) return;
+  if (!user) return undefined;
 
   sincronizzaTokenPush();
+
+  /*
+   * Il telefono puo' tornare in primo piano dopo che l'utente ha
+   * concesso il permesso o dopo che FCM ha ruotato il token: un
+   * riallineamento anche su focus/visibility evita di restare con un
+   * token vecchio fino al riavvio dell'app.
+   */
+  const riallineaToken = () => {
+    if (document.visibilityState === "visible") {
+      sincronizzaTokenPush();
+    }
+  };
+
+  document.addEventListener(
+    "visibilitychange",
+    riallineaToken
+  );
+  window.addEventListener("focus", riallineaToken);
+
+  return () => {
+    document.removeEventListener(
+      "visibilitychange",
+      riallineaToken
+    );
+    window.removeEventListener("focus", riallineaToken);
+  };
 }, [user]);
 
 /*
