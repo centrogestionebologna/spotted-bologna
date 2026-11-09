@@ -1496,6 +1496,21 @@ async function notificaAmministratoriServer({
 
       if (!inviaPush) continue;
 
+      /*
+       * "Nuovi post pubblicati" e' l'unico avviso che ha un
+       * equivalente nel riepilogo: chi ha scelto giornaliera o
+       * settimanale lo trova li' e non riceve anche la push
+       * immediata. La preferenza "Immediata" controlla proprio
+       * questa push. Pending, segnalazioni e nuovi iscritti restano
+       * invece sempre immediati.
+       */
+      if (
+        type === "new-post" &&
+        admin.newsletter !== "immediata"
+      ) {
+        continue;
+      }
+
       const push = await inviaPushAUtente({
         env,
         accessToken,
@@ -2366,6 +2381,117 @@ export default {
     }
 
     /*
+     * Push di prova richiesta dall'utente autenticato: serve a
+     * verificare permesso, token e consegna senza creare una
+     * notifica nella campanella. Ogni utente puo' testare solo i
+     * propri dispositivi.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname === "/test-push"
+    ) {
+      try {
+        if (origin && !origineInElenco(origin, env)) {
+          console.warn(
+            "Origine fuori da ALLOWED_ORIGIN:",
+            origin
+          );
+        }
+
+        const idToken = leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const risultato =
+          await inviaPushAUtente({
+            env,
+            recipientUserId: identita.uid,
+            title: "Spotted Bologna",
+            body: "Le notifiche sono attive!",
+            url: "/",
+            notificationId: "test-push"
+          });
+
+        if (risultato.totalDevices === 0) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Nessun dispositivo registrato: attiva prima le notifiche push."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (risultato.sent === 0) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "FCM non ha consegnato la notifica. Riprova tra poco.",
+              totalDevices:
+                risultato.totalDevices,
+              sent: 0,
+              failed: risultato.failed
+            },
+            502,
+            origin,
+            env
+          );
+        }
+
+        return rispostaJson(
+          {
+            success: true,
+            totalDevices:
+              risultato.totalDevices,
+            sent: risultato.sent,
+            failed: risultato.failed
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /test-push:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante l'invio della notifica di prova."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
      * Endpoint per inviare una push a tutti i dispositivi
      * di un determinato utente.
      *
@@ -3042,17 +3168,34 @@ if (
       const admin
       of amministratoriAbilitati
     ) {
-      await creaNotificaInterna({
-        env,
-        accessToken,
-        userId: admin.uid,
-        type: "report",
-        title:
-          "🚩 Spotted segnalato",
-        body:
-          "Uno spotted ha raggiunto 3 segnalazioni ed è stato rimosso dalla community.",
-        postId: originalId
-      });
+      /*
+       * ID stabile per admin: se l'endpoint viene richiamato (doppio
+       * clic, retry) la notifica non viene duplicata e la push non
+       * riparte.
+       */
+      const notificationId =
+        `report_${pendingPostId}_${admin.uid}`;
+
+      const notifica =
+        await creaNotificaInterna({
+          env,
+          accessToken,
+          userId: admin.uid,
+          type: "report",
+          title:
+            "🚩 Spotted segnalato",
+          body:
+            "Uno spotted ha raggiunto 3 segnalazioni ed è stato rimosso dalla community.",
+          /*
+           * Lo spotted pubblico e' gia' stato cancellato: senza
+           * postId la notifica non offre un collegamento che
+           * porterebbe a una card inesistente.
+           */
+          postId: null,
+          notificationId
+        });
+
+      if (!notifica) continue;
 
       notificheInterneCreate += 1;
 
@@ -3066,9 +3209,8 @@ if (
           body:
             "Uno spotted ha raggiunto 3 segnalazioni e richiede moderazione.",
           url: "/",
-          notificationId:
-            `report_${pendingPostId}`,
-          postId: originalId
+          notificationId,
+          postId: ""
         });
 
       pushInviate +=
@@ -3470,6 +3612,211 @@ if (
             error:
               errore.message ||
               "Errore durante il conteggio degli iscritti."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Notifica di uno spotted inviato senza account.
+     *
+     * Chi pubblica da non loggato non ha un Firebase ID token, quindi
+     * non puo' chiamare /notify-admins. Qui il Worker riceve solo
+     * l'ID del documento e rilegge testo e autore con il service
+     * account: il contenuto della notifica non e' falsificabile.
+     * La data limita gli invii ai soli spotted appena creati, perche'
+     * il feed e' pubblico e senza questo controllo si potrebbero far
+     * ripartire notifiche per vecchi spotted anonimi.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/notify-anonymous-post"
+    ) {
+      try {
+        if (origin && !origineInElenco(origin, env)) {
+          console.warn(
+            "Origine fuori da ALLOWED_ORIGIN:",
+            origin
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const postId =
+          typeof corpo.postId === "string"
+            ? corpo.postId.trim()
+            : "";
+
+        const pendingPostId =
+          typeof corpo.pendingPostId === "string"
+            ? corpo.pendingPostId.trim()
+            : "";
+
+        if (
+          (!postId && !pendingPostId) ||
+          (postId && pendingPostId)
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Indica uno e un solo spotted."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const identificativo =
+          postId || pendingPostId;
+
+        if (
+          identificativo.length > 128 ||
+          identificativo.includes("/")
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "ID spotted non valido."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(
+            serviceAccount
+          );
+
+        const documento =
+          await leggiDocumentoConServiceAccount(
+            {
+              env,
+              accessToken,
+              percorso: postId
+                ? `posts/${encodeURIComponent(
+                    postId
+                  )}`
+                : `pendingPosts/${encodeURIComponent(
+                    pendingPostId
+                  )}`
+            }
+          );
+
+        if (!documento) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "Lo spotted non esiste."
+            },
+            404,
+            origin,
+            env
+          );
+        }
+
+        const campi = documento.fields || {};
+
+        if (
+          valoreFirestore(campi.authorId) !==
+          "anonimo"
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Lo spotted non è anonimo."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const createdAt = valoreFirestore(
+          campi.createdAt
+        );
+
+        const eta =
+          Date.now() -
+          new Date(createdAt).getTime();
+
+        if (
+          !createdAt ||
+          !Number.isFinite(eta) ||
+          eta > 15 * 60 * 1000
+        ) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Lo spotted non è recente."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const testo = String(
+          valoreFirestore(campi.text) || ""
+        ).trim();
+
+        await notificaAmministratoriServer({
+          env,
+          accessToken,
+          attore: { uid: "anonimo" },
+          type: postId
+            ? "new-post"
+            : "pending",
+          title: postId
+            ? "📝 Nuovo spotted pubblicato"
+            : "📩 Nuovo spotted pending",
+          testo: postId
+            ? (
+                testo ||
+                "È stato pubblicato un nuovo spotted."
+              ).slice(0, 240)
+            : "Richiede approvazione",
+          postId: identificativo,
+          inviaPush: true
+        });
+
+        /*
+         * Nessun conteggio nel corpo: l'endpoint e' pubblico e non
+         * serve esporre quanti admin o dispositivi ci sono.
+         */
+        return rispostaJson(
+          { success: true },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /notify-anonymous-post:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante la notifica dello spotted anonimo."
           },
           500,
           origin,

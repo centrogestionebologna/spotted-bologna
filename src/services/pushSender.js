@@ -3,6 +3,35 @@ import { auth } from "../firebase";
 const WORKER_URL =
   "https://spotted-bologna-push.centrogestionebologna.workers.dev";
 
+const leggiRispostaWorker = async (risposta) => {
+  let risultato;
+
+  try {
+    risultato = await risposta.json();
+  } catch (errore) {
+    console.error(
+      "Risposta non valida dal Worker:",
+      errore
+    );
+
+    throw new Error(
+      `Risposta non valida dal Worker (${risposta.status}).`
+    );
+  }
+
+  if (
+    !risposta.ok ||
+    !risultato.success
+  ) {
+    throw new Error(
+      risultato.error ||
+        `Errore Worker (${risposta.status}).`
+    );
+  }
+
+  return risultato;
+};
+
 const eseguiRichiestaWorker = async (
   endpoint,
   payload
@@ -30,32 +59,29 @@ const eseguiRichiestaWorker = async (
     }
   );
 
-  let risultato;
+  return leggiRispostaWorker(risposta);
+};
 
-  try {
-    risultato = await risposta.json();
-  } catch (errore) {
-    console.error(
-      "Risposta non valida dal Worker:",
-      errore
-    );
+/*
+ * Variante senza token, per gli spotted inviati da chi non ha un
+ * account: il Worker rilegge il documento e verifica che sia anonimo.
+ */
+const eseguiRichiestaWorkerPubblica = async (
+  endpoint,
+  payload
+) => {
+  const risposta = await fetch(
+    `${WORKER_URL}${endpoint}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
 
-    throw new Error(
-      `Risposta non valida dal Worker (${risposta.status}).`
-    );
-  }
-
-  if (
-    !risposta.ok ||
-    !risultato.success
-  ) {
-    throw new Error(
-      risultato.error ||
-        `Errore Worker (${risposta.status}).`
-    );
-  }
-
-  return risultato;
+  return leggiRispostaWorker(risposta);
 };
 
 export const aggiornaConteggioIscrittiServer = async (
@@ -85,6 +111,56 @@ export const notificaNuovoPending = async (
       pendingPostId:
         pendingPostId.trim()
     }
+  );
+};
+
+/*
+ * Spotted inviato senza account: non c'e' un Firebase ID token da
+ * mandare, quindi al Worker arriva solo l'ID del documento e testo e
+ * autore vengono riletti con il service account.
+ */
+export const notificaSpottedAnonimo = async ({
+  postId = "",
+  pendingPostId = ""
+}) => {
+  if (
+    typeof postId !== "string" ||
+    typeof pendingPostId !== "string"
+  ) {
+    throw new Error(
+      "ID dello spotted anonimo non valido."
+    );
+  }
+
+  const pubblicato = postId.trim();
+  const pending = pendingPostId.trim();
+
+  if (
+    (!pubblicato && !pending) ||
+    (pubblicato && pending)
+  ) {
+    throw new Error(
+      "Indica uno e un solo spotted."
+    );
+  }
+
+  return eseguiRichiestaWorkerPubblica(
+    "/notify-anonymous-post",
+    {
+      postId: pubblicato,
+      pendingPostId: pending
+    }
+  );
+};
+
+/*
+ * Push di prova: il Worker la invia soltanto ai dispositivi
+ * dell'utente autenticato, senza creare una notifica interna.
+ */
+export const inviaPushDiProva = async () => {
+  return eseguiRichiestaWorker(
+    "/test-push",
+    {}
   );
 };
 

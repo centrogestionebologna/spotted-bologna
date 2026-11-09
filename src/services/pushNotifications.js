@@ -12,6 +12,8 @@ import {
   messagingPromise
 } from "../firebase";
 
+import { inviaPushDiProva } from "./pushSender";
+
 const VAPID_KEY =
   process.env.REACT_APP_FIREBASE_VAPID_KEY;
 
@@ -430,4 +432,16 @@ export const ascoltaNotificheInPrimoPiano = async (
       callback(payload);
     }
   });
+};
+
+/*
+ * Verifica end-to-end: riallinea il token del dispositivo e chiede al
+ * Worker una push reale. Se il permesso e' stato revocato o il token
+ * non e' piu' valido, l'errore arriva subito invece di restare
+ * invisibile fino alla prossima notifica.
+ */
+export const verificaNotifichePush = async () => {
+  await attivaNotifichePush();
+
+  return inviaPushDiProva();
 };

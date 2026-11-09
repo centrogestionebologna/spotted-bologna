@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import {
   attivaNotifichePush,
+  verificaNotifichePush,
   infoSupportoPush
 } from "../services/pushNotifications";
 
@@ -42,6 +43,12 @@ function NotificationSettings({
     useState(false);
 
   const [messaggioPush, setMessaggioPush] =
+    useState("");
+
+  const [verificaPush, setVerificaPush] =
+    useState(false);
+
+  const [messaggioVerificaPush, setMessaggioVerificaPush] =
     useState("");
 
   /*
@@ -92,6 +99,35 @@ function NotificationSettings({
     }
   };
 
+  const gestisciVerificaPush = async () => {
+    try {
+      setVerificaPush(true);
+      setMessaggioVerificaPush("");
+
+      const risultato =
+        await verificaNotifichePush();
+
+      setMessaggioVerificaPush(
+        `✅ Notifica di prova inviata a ${risultato.sent} ${
+          risultato.sent === 1
+            ? "dispositivo"
+            : "dispositivi"
+        }. Controlla la notifica sul dispositivo.`
+      );
+    } catch (errore) {
+      console.error(
+        "Errore durante la verifica delle notifiche push:",
+        errore
+      );
+
+      setMessaggioVerificaPush(
+        `❌ ${errore.message}`
+      );
+    } finally {
+      setVerificaPush(false);
+    }
+  };
+
   return (
     <div className="impostazioni-notifiche">
 
@@ -109,6 +145,16 @@ function NotificationSettings({
           {attivazionePush
             ? "Attivazione..."
             : "Attiva notifiche push"}
+        </button>
+
+        <button
+          type="button"
+          onClick={gestisciVerificaPush}
+          disabled={verificaPush || attivazionePush}
+        >
+          {verificaPush
+            ? "Invio della prova..."
+            : "📨 Invia notifica di prova"}
         </button>
 
         {supportoPush.iOS && !supportoPush.standalone && (
@@ -130,6 +176,12 @@ function NotificationSettings({
         {messaggioPush && (
           <p className="push-notifications-message">
             {messaggioPush}
+          </p>
+        )}
+
+        {messaggioVerificaPush && (
+          <p className="push-notifications-message">
+            {messaggioVerificaPush}
           </p>
         )}
       </div>
@@ -180,7 +232,7 @@ function NotificationSettings({
                 checked={newsletter === "immediata"}
                 onChange={() => setNewsletter("immediata")}
               />
-              <span>Immediata</span>
+              <span>Immediata — push a ogni nuovo spotted</span>
             </label>
           )}
 

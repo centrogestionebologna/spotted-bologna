@@ -38,6 +38,8 @@ import {
   notificaAttivitaPost,
   notificaAmministratoriServer,
   notificaNuovoPending,
+  notificaPostSegnalato,
+  notificaSpottedAnonimo,
   notificaComunicazioneServizio,
   notificaSbloccoGruppo,
   approvaCambioNickname
@@ -48,6 +50,7 @@ import {
   mostraNotificaInPrimoPiano,
   sincronizzaTokenPush,
   attivaNotifichePush,
+  verificaNotifichePush,
   infoSupportoPush
 } from "./services/pushNotifications";
 
@@ -66,7 +69,7 @@ const descriviNewsletter = (valore) => {
   }
 
   if (valore === "immediata") {
-    return "Immediata";
+    return "Immediata — push a ogni nuovo spotted";
   }
 
   return "Mai";
@@ -462,6 +465,12 @@ const [messaggioPushOnboarding, setMessaggioPushOnboarding] =
   useState("");
 const [pushAttiveOnboarding, setPushAttiveOnboarding] =
   useState(false);
+const [verificaPushOnboarding, setVerificaPushOnboarding] =
+  useState(false);
+const [
+  messaggioVerificaPushOnboarding,
+  setMessaggioVerificaPushOnboarding
+] = useState("");
 
   const [newsletter, setNewsletter] =
   useState("mai");
@@ -1314,6 +1323,35 @@ const attivaPushOnboarding = async () => {
   }
 };
 
+const verificaNotificheOnboarding = async () => {
+  setVerificaPushOnboarding(true);
+  setMessaggioVerificaPushOnboarding("");
+
+  try {
+    const risultato = await verificaNotifichePush();
+
+    setPushAttiveOnboarding(true);
+    setMessaggioVerificaPushOnboarding(
+      `✅ Notifica di prova inviata a ${risultato.sent} ${
+        risultato.sent === 1
+          ? "dispositivo"
+          : "dispositivi"
+      }. Controlla la notifica sul dispositivo.`
+    );
+  } catch (errore) {
+    console.warn(
+      "Verifica push dal primo accesso fallita:",
+      errore
+    );
+
+    setMessaggioVerificaPushOnboarding(
+      `❌ ${errore.message}`
+    );
+  } finally {
+    setVerificaPushOnboarding(false);
+  }
+};
+
 const inviaSpotted = async () => {
   const adesso = Date.now();
 
@@ -1400,8 +1438,16 @@ const inviaSpotted = async () => {
       /*
        * La notifica agli amministratori la manda il Worker: cosi'
        * arriva anche se in quel momento nessun admin ha l'app aperta.
+       * Chi pubblica senza account non ha un token Firebase, quindi
+       * passa dall'endpoint pubblico che rilegge lo spotted.
        */
-      notificaNuovoPending(pendingRef.id).catch(
+      const avvisoPending = user
+        ? notificaNuovoPending(pendingRef.id)
+        : notificaSpottedAnonimo({
+            pendingPostId: pendingRef.id
+          });
+
+      avvisoPending.catch(
         (erroreNotifica) => {
           console.warn(
             "Spotted in moderazione, notifica non inviata:",
@@ -1428,18 +1474,34 @@ const inviaSpotted = async () => {
         postRef.id
       );
 
-      notificaAmministratori({
-        type: "new-post",
-        title: "📝 Nuovo spotted pubblicato",
-        body: (nuovoPost.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
-        postId: postRef.id,
-        inviaPush: true
-      }).catch((erroreNotifica) => {
-        console.warn(
-          "Spotted pubblicato, notifica non inviata:",
-          erroreNotifica
-        );
-      });
+      if (user) {
+        notificaAmministratori({
+          type: "new-post",
+          title: "📝 Nuovo spotted pubblicato",
+          body: (nuovoPost.text || "È stato pubblicato un nuovo spotted.").slice(0, 240),
+          postId: postRef.id,
+          inviaPush: true
+        }).catch((erroreNotifica) => {
+          console.warn(
+            "Spotted pubblicato, notifica non inviata:",
+            erroreNotifica
+          );
+        });
+      } else {
+        /*
+         * Senza account non c'e' un Firebase ID token: lo spotted
+         * viene notificato dall'endpoint pubblico, che rilegge il
+         * documento con il service account.
+         */
+        notificaSpottedAnonimo({
+          postId: postRef.id
+        }).catch((erroreNotifica) => {
+          console.warn(
+            "Spotted anonimo pubblicato, notifica non inviata:",
+            erroreNotifica
+          );
+        });
+      }
 
       caricaPost();
 
@@ -2312,7 +2374,19 @@ const segnalaPost = async (postId) => {
     /*
      * Alla terza segnalazione, lo spotted viene
      * prima copiato in pendingPosts.
+     *
+     * Il contatore pubblico va portato a 3 prima della cancellazione:
+     * la regola Firestore permette il delete solo se
+     * resource.data.reports >= 3, e con il documento ancora a 2 la
+     * rimozione veniva rifiutata lasciando online uno spotted che era
+     * gia' finito in moderazione.
      */
+    await updateDoc(postRef, {
+      reports: nuoviReport,
+      reportedBy:
+        nuoviSegnalatori
+    });
+
     const pendingRef = await addDoc(
       collection(db, "pendingPosts"),
       {
@@ -2329,14 +2403,6 @@ const segnalaPost = async (postId) => {
       }
     );
 
-    await notificaAmministratori({
-      type: "report",
-      title: "🚩 Post segnalato",
-      body: (dati.text || "Uno spotted ha raggiunto il limite di segnalazioni.").slice(0, 240),
-      postId: pendingRef.id,
-      inviaPush: true
-    });
-
     console.log(
       "Post segnalato spostato in pending:",
       pendingRef.id
@@ -2347,6 +2413,21 @@ const segnalaPost = async (postId) => {
      * averlo copiato correttamente in pendingPosts.
      */
     await deleteDoc(postRef);
+
+    /*
+     * La notifica della rimozione la manda il Worker: ha il lucchetto
+     * anti-duplicati su pushDispatches e conosce le preferenze degli
+     * admin. Lo spotted pubblico non esiste piu', quindi la notifica
+     * resta un avviso di moderazione senza collegamento a una card.
+     */
+    notificaPostSegnalato(pendingRef.id).catch(
+      (erroreNotifica) => {
+        console.warn(
+          "Spotted rimosso, notifica agli admin non inviata:",
+          erroreNotifica
+        );
+      }
+    );
 
     await caricaPost();
 
@@ -3743,6 +3824,19 @@ return (
         : "🔔 Attiva notifiche push"}
     </button>
 
+    <button
+      type="button"
+      onClick={verificaNotificheOnboarding}
+      disabled={
+        verificaPushOnboarding ||
+        attivazionePushOnboarding
+      }
+    >
+      {verificaPushOnboarding
+        ? "Invio della prova..."
+        : "📨 Invia notifica di prova"}
+    </button>
+
     {supportoPushOnboarding.iOS &&
       !supportoPushOnboarding.standalone && (
         <p className="push-notifications-message">
@@ -3755,6 +3849,12 @@ return (
     {messaggioPushOnboarding && (
       <p className="push-notifications-message">
         {messaggioPushOnboarding}
+      </p>
+    )}
+
+    {messaggioVerificaPushOnboarding && (
+      <p className="push-notifications-message">
+        {messaggioVerificaPushOnboarding}
       </p>
     )}
 
