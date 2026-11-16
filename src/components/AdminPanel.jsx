@@ -1,6 +1,16 @@
 const linkValido = (link) =>
   /^https?:\/\//i.test(link || "");
 
+const pubblicitaRilevata = (post) =>
+  /^Pubblicità rilevata:/i.test(
+    String(post.flagReason || "")
+  );
+
+const dettaglioPubblicita = (post) =>
+  String(post.flagReason || "")
+    .replace(/^Pubblicità rilevata:\s*/i, "")
+    .trim();
+
 function AdminPanel({
   pendingPosts,
   approvaPost,
@@ -8,82 +18,102 @@ function AdminPanel({
 }) {
   return (
     <>
-      {pendingPosts.map((post) => (
-        <div
-          key={post.id}
-          style={{
-            border: "2px solid orange",
-            padding: "15px",
-            marginBottom: "15px",
-            borderRadius: "10px"
-          }}
-        >
-          <h3>
-            {post.type === "groupProposal"
-              ? "📚 Proposta Gruppo"
-              : "📝 Spotted Normale"}
-          </h3>
+      {pendingPosts.map((post) => {
+        const isPubblicita = pubblicitaRilevata(post);
+        const dettaglio = dettaglioPubblicita(post);
 
-          <p>{post.text}</p>
+        return (
+          <article
+            key={post.id}
+            className={`admin-pending-card${
+              isPubblicita ? " is-advertising" : ""
+            }`}
+          >
+            <div className="admin-pending-head">
+              <h3>
+                {post.type === "groupProposal"
+                  ? "📚 Proposta Gruppo"
+                  : "📝 Spotted Normale"}
+              </h3>
 
-          {post.type === "groupProposal" && (
-            <>
-              <p>
-                <strong>🔗 Link gruppo:</strong>
-                <br />
-                {linkValido(post.groupLink) ? (
-                  <a
-                    href={post.groupLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {post.groupLink}
-                  </a>
-                ) : (
-                  <span style={{ color: "#ff5252" }}>
-                    Link non valido: {post.groupLink}
-                  </span>
-                )}
-              </p>
+              {isPubblicita && (
+                <span className="admin-pending-ad-badge">
+                  🛡️ Pubblicità
+                </span>
+              )}
+            </div>
 
-              <p>
-                <strong>❤️ Like richiesti:</strong>{" "}
-                {post.requiredLikes}
-              </p>
-            </>
-          )}
+            {isPubblicita && (
+              <div className="admin-pending-ad-alert">
+                <strong>
+                  Pubblicità rilevata automaticamente
+                </strong>
 
-          {post.reports > 0 && (
-            <p
-              style={{
-                color: "#ff9800",
-                fontWeight: "bold"
-              }}
-            >
-              🚩 Segnalazioni: {post.reports}
+                <p>{dettaglio}</p>
+
+                <p className="admin-pending-ad-help">
+                  Controlla link, profili, contatti e linguaggio
+                  promozionale prima di approvare.
+                </p>
+              </div>
+            )}
+
+            <p className="admin-pending-text">
+              {post.text || "Testo non disponibile."}
             </p>
-          )}
 
-          {post.flagReason && (
-            <p style={{ color: "#ff9800" }}>
-              🚩 Motivo: {post.flagReason}
-            </p>
-          )}
+            {post.type === "groupProposal" && (
+              <>
+                <p className="admin-pending-meta">
+                  <strong>🔗 Link gruppo:</strong>
+                  <br />
+                  {linkValido(post.groupLink) ? (
+                    <a
+                      className="admin-pending-link"
+                      href={post.groupLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {post.groupLink}
+                    </a>
+                  ) : (
+                    <span className="admin-pending-invalid-link">
+                      Link non valido: {post.groupLink}
+                    </span>
+                  )}
+                </p>
 
-          <div style={{ marginTop: "15px" }}>
-            <button onClick={() => approvaPost(post)}>
-              ✅ Approva
-            </button>
+                <p className="admin-pending-meta">
+                  <strong>❤️ Like richiesti:</strong>{" "}
+                  {post.requiredLikes}
+                </p>
+              </>
+            )}
 
-            <button
-              onClick={() => rifiutaPost(post.id)}
-              style={{ marginLeft: "10px" }}
-            >
-              ❌ Rifiuta
-            </button>
-          </div>
-        </div>
-      ))}
+            {post.reports > 0 && (
+              <p className="admin-pending-meta">
+                🚩 Segnalazioni: {post.reports}
+              </p>
+            )}
+
+            {post.flagReason && !isPubblicita && (
+              <p className="admin-pending-meta">
+                🚩 Motivo: {post.flagReason}
+              </p>
+            )}
+
+            <div className="admin-pending-actions">
+              <button onClick={() => approvaPost(post)}>
+                ✅ Approva
+              </button>
+
+              <button onClick={() => rifiutaPost(post.id)}>
+                ❌ Rifiuta
+              </button>
+            </div>
+          </article>
+        );
+      })}
     </>
   );
 }

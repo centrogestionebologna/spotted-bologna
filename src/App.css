@@ -3713,3 +3713,146 @@ details summary {
     font-size: 8px;
   }
 }
+
+/* Moderazione pubblicità */
+.spotted-ad-warning {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+
+  border: 1px solid rgba(244, 197, 66, 0.4);
+  border-radius: 10px;
+  background: rgba(244, 197, 66, 0.08);
+
+  color: #f4d77a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.community-rules-wide {
+  grid-column: 1 / -1;
+}
+
+.admin-pending-card {
+  margin-bottom: 14px;
+  padding: 16px;
+
+  border: 1px solid rgba(244, 197, 66, 0.3);
+  border-radius: 16px;
+  background: #171717;
+}
+
+.admin-pending-card.is-advertising {
+  border-color: rgba(255, 122, 64, 0.7);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(80, 32, 18, 0.35),
+      #171717 60%
+    );
+  box-shadow:
+    0 0 0 1px rgba(255, 122, 64, 0.07),
+    0 0 24px rgba(255, 122, 64, 0.08);
+}
+
+.admin-pending-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-pending-head h3 {
+  margin: 0;
+
+  font-size: 16px;
+}
+
+.admin-pending-ad-badge {
+  flex: none;
+  padding: 4px 8px;
+
+  border: 1px solid rgba(255, 122, 64, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 122, 64, 0.12);
+
+  color: #ffb18a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.admin-pending-text {
+  margin: 12px 0;
+
+  color: #f2f2f2;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.admin-pending-ad-alert {
+  margin: 12px 0;
+  padding: 12px;
+
+  border: 1px solid rgba(255, 122, 64, 0.65);
+  border-radius: 12px;
+  background: rgba(255, 122, 64, 0.09);
+}
+
+.admin-pending-ad-alert strong {
+  color: #ffb18a;
+  font-size: 12px;
+}
+
+.admin-pending-ad-alert p {
+  margin: 6px 0 0;
+
+  color: #ffd7c5;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-pending-ad-alert .admin-pending-ad-help {
+  color: #c9a999;
+  font-size: 12px;
+}
+
+.admin-pending-meta {
+  margin: 6px 0;
+
+  color: #ffb74d;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.admin-pending-link {
+  color: #f4c542;
+  overflow-wrap: anywhere;
+}
+
+.admin-pending-invalid-link {
+  color: #ff5252;
+}
+
+.admin-pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+@media (max-width: 640px) {
+  .admin-pending-head {
+    flex-direction: column;
+  }
+
+  .admin-pending-actions {
+    flex-direction: column;
+  }
+
+  .admin-pending-actions button {
+    width: 100%;
+  }
+}

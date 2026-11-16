@@ -1905,6 +1905,43 @@ function CommunityDashboard({
               Gestisci parole vietate
             </button>
           </section>
+
+          <section className="community-card community-rules-wide">
+            <div className="community-card-head">
+              <div>
+                <h3>Pubblicità e contatti</h3>
+                <span>Controllo automatico sempre attivo</span>
+              </div>
+
+              <span className="community-card-badge">🛡️</span>
+            </div>
+
+            <p className="community-rules-text">
+              Gli spotted con link a social, marketplace o siti
+              esterni, profili citati, email, numeri di telefono,
+              inviti a scrivere in privato o linguaggio promozionale
+              vanno sempre in moderazione. Anche con la pubblicazione
+              automatica attiva.
+            </p>
+
+            <div className="community-word-chips">
+              <span className="community-word-chip">
+                Instagram / Facebook
+              </span>
+              <span className="community-word-chip">
+                Telegram / WhatsApp
+              </span>
+              <span className="community-word-chip">
+                Link e profili
+              </span>
+              <span className="community-word-chip">
+                Sconti e vendite
+              </span>
+              <span className="community-word-chip">
+                Contatti privati
+              </span>
+            </div>
+          </section>
         </div>
       )}
 

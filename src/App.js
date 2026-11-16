@@ -4,6 +4,7 @@ import Header from "./components/Header";
 import Logo from "./components/Logo";
 import AdminPanel from "./components/AdminPanel";
 import CommunityDashboard from "./components/CommunityDashboard";
+import { analizzaPubblicita } from "./utils/moderazione";
 import Post from "./components/Post";
 import NicknameSettings from "./components/NicknameSettings";
 import NotificationSettings from "./components/NotificationSettings";
@@ -1402,8 +1403,28 @@ const inviaSpotted = async () => {
       );
     });
 
+  /*
+   * La pubblicità viene sempre messa in moderazione, anche quando
+   * la pubblicazione automatica è attiva.
+   */
+  const analisiAnnuncio =
+    analizzaPubblicita(testoPulito);
+
+  const motiviModerazione = [];
+
+  if (analisiAnnuncio.rilevata) {
+    motiviModerazione.push(
+      analisiAnnuncio.flagReason
+    );
+  }
+
+  if (contieneParolaVietata) {
+    motiviModerazione.push("Parola vietata");
+  }
+
   const vaInModerazione =
     contieneParolaVietata ||
+    analisiAnnuncio.rilevata ||
     approvalEnabledPosts;
 
   const nuovoPost = {
@@ -1415,9 +1436,10 @@ const inviaSpotted = async () => {
       : "published",
     reports: 0,
     reportedBy: [],
-    flagReason: contieneParolaVietata
-      ? "Parola vietata"
-      : null
+    flagReason:
+      motiviModerazione.length > 0
+        ? motiviModerazione.join(" · ")
+        : null
   };
 
   /*
@@ -1843,6 +1865,9 @@ const approvaPost = async (post) => {
 
   // tolgo i campi tecnici che non devono finire in "posts"
   const { id, originalId, ...postData } = post;
+
+  /* Il motivo di moderazione serve solo agli admin. */
+  delete postData.flagReason;
 
   const datiDaPubblicare = {
     ...postData,
@@ -3596,6 +3621,9 @@ const pushGiaAttive =
   (typeof Notification !== "undefined" &&
     Notification.permission === "granted");
 
+const analisiPubblicitaSpotted =
+  analizzaPubblicita(spottedText);
+
 return (
   <div className="app-container">
 
@@ -3927,6 +3955,13 @@ return (
 >
   {spottedText.length}/1000
 </p>
+
+{analisiPubblicitaSpotted.rilevata && (
+  <p className="spotted-ad-warning" role="status">
+    🛡️ Contiene link, contatti o linguaggio promozionale:
+    lo spotted verrà inviato in moderazione.
+  </p>
+)}
 
 <div
   style={{
