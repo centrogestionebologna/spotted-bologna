@@ -1,0 +1,23 @@
+Sfondi per le card condivisibili degli spotted.
+
+Foto da Unsplash, licenza Unsplash:
+https://unsplash.com/license
+
+- gym.jpg: https://images.unsplash.com/photo-1534438327276-14e5300c3a48
+- food.jpg: https://images.unsplash.com/photo-1504674900247-0877df9cc836
+- nightlife.jpg: https://images.unsplash.com/photo-1514525253161-7a46d19cd819
+- university.jpg: https://images.unsplash.com/photo-1523240795612-9a054b0db644
+- sport.jpg: https://images.unsplash.com/photo-1461896836934-ffe607ba8211
+- nature.jpg: https://images.unsplash.com/photo-1441974231531-c6227db76b6e
+- music.jpg: https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f
+- animals.jpg: https://images.unsplash.com/photo-1450778869180-41d0601e046e
+- work.jpg: https://images.unsplash.com/photo-1497366216548-37526070297c
+- love.jpg: https://images.unsplash.com/photo-1518199266791-5375a83190b7
+- travel.jpg: https://images.unsplash.com/photo-1518005020951-eccb494ad742
+
+Foto da Pexels, licenza Pexels:
+https://www.pexels.com/license/
+
+- bologna.jpg: https://www.pexels.com/photo/35426196/
+
+Le immagini sono state ridimensionate e ritagliate per le card verticali.
