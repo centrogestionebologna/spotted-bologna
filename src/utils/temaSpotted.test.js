@@ -26,6 +26,8 @@ describe("scegliTemaSpotted", () => {
       expect(tema.chiave).toBe(chiaveAttesa);
       expect(tema.localita).toBe(localitaAttesa);
       expect(tema.file).toBeTruthy();
+      expect(tema.files.length).toBeGreaterThanOrEqual(3);
+      expect(tema.files).toContain(tema.file);
       expect(tema.tags).toContain(localitaAttesa);
     }
   );
@@ -41,5 +43,18 @@ describe("scegliTemaSpotted", () => {
     const tema = scegliTemaSpotted("Abito in Bolognina");
 
     expect(tema.localita).toBe("Bolognina");
+  });
+
+  test("alterna più sfondi per lo stesso tema", () => {
+    const sfondi = new Set(
+      Array.from({ length: 18 }, (_, indice) =>
+        scegliTemaSpotted(
+          "Pizza e aperitivo in centro",
+          `post-${indice}`
+        ).file
+      )
+    );
+
+    expect(sfondi.size).toBeGreaterThan(1);
   });
 });

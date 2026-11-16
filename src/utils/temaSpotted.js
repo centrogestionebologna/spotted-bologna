@@ -3,7 +3,11 @@ const TEMI = [
     chiave: "gym",
     etichetta: "Gym",
     icona: "🏋️",
-    file: "gym.jpg",
+    files: [
+      "gym.jpg",
+      "gym-2.jpg",
+      "gym-3.jpg"
+    ],
     colori: ["#0f766e", "#0e7490", "#1e1b4b"],
     parole: [
       "palestra",
@@ -31,7 +35,11 @@ const TEMI = [
     chiave: "food",
     etichetta: "Food",
     icona: "🍝",
-    file: "food.jpg",
+    files: [
+      "food.jpg",
+      "food-2.jpg",
+      "food-3.jpg"
+    ],
     colori: ["#7c2d12", "#b91c1c", "#1c1917"],
     parole: [
       "cibo",
@@ -65,7 +73,11 @@ const TEMI = [
     chiave: "nightlife",
     etichetta: "Nightlife",
     icona: "🌃",
-    file: "nightlife.jpg",
+    files: [
+      "nightlife.jpg",
+      "nightlife-2.jpg",
+      "nightlife-3.jpg"
+    ],
     colori: ["#4c1d95", "#0e7490", "#09090b"],
     parole: [
       "discoteca",
@@ -89,7 +101,11 @@ const TEMI = [
     chiave: "university",
     etichetta: "University",
     icona: "🎓",
-    file: "university.jpg",
+    files: [
+      "university.jpg",
+      "university-2.jpg",
+      "university-3.jpg"
+    ],
     colori: ["#78350f", "#b45309", "#111827"],
     parole: [
       "universita",
@@ -119,7 +135,11 @@ const TEMI = [
     chiave: "sport",
     etichetta: "Sport",
     icona: "⚽",
-    file: "sport.jpg",
+    files: [
+      "sport.jpg",
+      "sport-2.jpg",
+      "sport-3.jpg"
+    ],
     colori: ["#991b1b", "#c2410c", "#111827"],
     parole: [
       "calcio",
@@ -146,7 +166,11 @@ const TEMI = [
     chiave: "nature",
     etichetta: "Nature",
     icona: "🌿",
-    file: "nature.jpg",
+    files: [
+      "nature.jpg",
+      "nature-2.jpg",
+      "nature-3.jpg"
+    ],
     colori: ["#14532d", "#065f46", "#0f172a"],
     parole: [
       "parco",
@@ -174,7 +198,11 @@ const TEMI = [
     chiave: "music",
     etichetta: "Music",
     icona: "🎵",
-    file: "music.jpg",
+    files: [
+      "music.jpg",
+      "music-2.jpg",
+      "music-3.jpg"
+    ],
     colori: ["#6d28d9", "#be123c", "#09090b"],
     parole: [
       "musica",
@@ -195,7 +223,11 @@ const TEMI = [
     chiave: "animals",
     etichetta: "Animals",
     icona: "🐾",
-    file: "animals.jpg",
+    files: [
+      "animals.jpg",
+      "animals-2.jpg",
+      "animals-3.jpg"
+    ],
     colori: ["#3f6212", "#166534", "#111827"],
     parole: [
       "cane",
@@ -216,7 +248,11 @@ const TEMI = [
     chiave: "work",
     etichetta: "Work",
     icona: "💼",
-    file: "work.jpg",
+    files: [
+      "work.jpg",
+      "work-2.jpg",
+      "work-3.jpg"
+    ],
     colori: ["#334155", "#0f766e", "#0f172a"],
     parole: [
       "lavoro",
@@ -238,7 +274,11 @@ const TEMI = [
     chiave: "love",
     etichetta: "Love",
     icona: "❤️",
-    file: "love.jpg",
+    files: [
+      "love.jpg",
+      "love-2.jpg",
+      "love-3.jpg"
+    ],
     colori: ["#9d174d", "#7e22ce", "#111827"],
     parole: [
       "amore",
@@ -265,7 +305,11 @@ const TEMI = [
     chiave: "travel",
     etichetta: "Travel",
     icona: "✈️",
-    file: "travel.jpg",
+    files: [
+      "travel.jpg",
+      "travel-2.jpg",
+      "travel-3.jpg"
+    ],
     colori: ["#0e7490", "#4338ca", "#111827"],
     parole: [
       "viaggio",
@@ -288,7 +332,11 @@ const TEMI = [
     chiave: "bologna",
     etichetta: "Community",
     icona: "📍",
-    file: "bologna.jpg",
+    files: [
+      "bologna.jpg",
+      "bologna-2.jpg",
+      "bologna-3.jpg"
+    ],
     colori: ["#7f1d1d", "#1d4ed8", "#0f172a"],
     parole: []
   }
@@ -385,7 +433,19 @@ function trovaLocalita(testoNormalizzato) {
   return trovate[0]?.nome || "Bologna";
 }
 
-export function scegliTemaSpotted(testo) {
+function hashTesto(testo) {
+  let hash = 0;
+  const valore = String(testo || "");
+
+  for (let indice = 0; indice < valore.length; indice += 1) {
+    hash =
+      (hash * 31 + valore.charCodeAt(indice)) >>> 0;
+  }
+
+  return hash;
+}
+
+export function scegliTemaSpotted(testo, seed = "") {
   const testoNormalizzato = normalizzaTesto(testo);
   const temaPredefinito = TEMI[TEMI.length - 1];
   let temaScelto = temaPredefinito;
@@ -420,8 +480,15 @@ export function scegliTemaSpotted(testo) {
       tag && elenco.indexOf(tag) === indice
   );
 
+  const fileScelto =
+    temaScelto.files[
+      hashTesto(`${testoNormalizzato}|${seed}`) %
+        temaScelto.files.length
+    ];
+
   return {
     ...temaScelto,
+    file: fileScelto,
     localita,
     tags
   };

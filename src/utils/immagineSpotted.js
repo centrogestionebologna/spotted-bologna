@@ -310,7 +310,10 @@ export async function creaImmagineSpotted(
     throw new Error("Canvas non disponibile");
   }
 
-  const tema = scegliTemaSpotted(testo);
+  const tema = scegliTemaSpotted(
+    testo,
+    post.id || ""
+  );
   const isGroupProposal =
     post.type === "groupProposal";
   const requiredLikes = Math.max(
@@ -476,7 +479,7 @@ export async function creaImmagineSpotted(
 
   const testoBadge = isGroupProposal
     ? "📚  PROPOSTA GRUPPO"
-    : "🤝  NUOVA SPOTTED";
+    : "🤝  NUOVO SPOTTED";
 
   context.font = "700 21px Arial, sans-serif";
   const larghezzaBadge =

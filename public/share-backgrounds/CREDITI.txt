@@ -4,20 +4,44 @@ Foto da Unsplash, licenza Unsplash:
 https://unsplash.com/license
 
 - gym.jpg: https://images.unsplash.com/photo-1534438327276-14e5300c3a48
+- gym-2.jpg: https://images.unsplash.com/photo-1517836357463-d25dfeac3438
+- gym-3.jpg: https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b
 - food.jpg: https://images.unsplash.com/photo-1504674900247-0877df9cc836
+- food-2.jpg: https://images.unsplash.com/photo-1565299624946-b28f40a0ae38
+- food-3.jpg: https://images.unsplash.com/photo-1546069901-ba9599a7e63c
 - nightlife.jpg: https://images.unsplash.com/photo-1514525253161-7a46d19cd819
+- nightlife-2.jpg: https://images.unsplash.com/photo-1492684223066-81342ee5ff30
+- nightlife-3.jpg: https://images.unsplash.com/photo-1516450360452-9312f5e86fc7
 - university.jpg: https://images.unsplash.com/photo-1523240795612-9a054b0db644
+- university-2.jpg: https://images.unsplash.com/photo-1541339907198-e08756dedf3f
+- university-3.jpg: https://images.unsplash.com/photo-1562774053-701939374585
 - sport.jpg: https://images.unsplash.com/photo-1461896836934-ffe607ba8211
+- sport-2.jpg: https://images.unsplash.com/photo-1574629810360-7efbbe195018
+- sport-3.jpg: https://images.unsplash.com/photo-1546519638-68e109498ffc
 - nature.jpg: https://images.unsplash.com/photo-1441974231531-c6227db76b6e
+- nature-2.jpg: https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05
+- nature-3.jpg: https://images.unsplash.com/photo-1507525428034-b723cf961d3e
 - music.jpg: https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f
+- music-2.jpg: https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4
+- music-3.jpg: https://images.unsplash.com/photo-1470225620780-dba8ba36b745
 - animals.jpg: https://images.unsplash.com/photo-1450778869180-41d0601e046e
+- animals-2.jpg: https://images.unsplash.com/photo-1517849845537-4d257902454a
+- animals-3.jpg: https://images.unsplash.com/photo-1518791841217-8f162f1e1131
 - work.jpg: https://images.unsplash.com/photo-1497366216548-37526070297c
+- work-2.jpg: https://images.unsplash.com/photo-1497366811353-6870744d04b2
+- work-3.jpg: https://images.unsplash.com/photo-1521737711867-e3b97375f902
 - love.jpg: https://images.unsplash.com/photo-1518199266791-5375a83190b7
+- love-2.jpg: https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2
+- love-3.jpg: https://images.unsplash.com/photo-1494774157365-9e04c6720e47
 - travel.jpg: https://images.unsplash.com/photo-1518005020951-eccb494ad742
+- travel-2.jpg: https://images.unsplash.com/photo-1488646953014-85cb44e25828
+- travel-3.jpg: https://images.unsplash.com/photo-1469854523086-cc02fe5d8800
 
 Foto da Pexels, licenza Pexels:
 https://www.pexels.com/license/
 
 - bologna.jpg: https://www.pexels.com/photo/35426196/
+- bologna-2.jpg: https://www.pexels.com/photo/1541363/ (Adrienn)
+- bologna-3.jpg: https://www.pexels.com/photo/36966119/ (EK photography)
 
 Le immagini sono state ridimensionate e ritagliate per le card verticali.
