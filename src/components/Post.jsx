@@ -84,9 +84,9 @@ const seguePost =
   // La conferma è già in App.js (eliminaPost): qui non la ripeto
   const confermaElimina = () => eliminaPost(post.id);
 
-  const scaricaImmagine = async () => {
+  const scaricaImmagine = async (formato = "verticale") => {
     try {
-      await scaricaImmagineSpotted(post, likesCount);
+      await scaricaImmagineSpotted(post, likesCount, formato);
     } catch (error) {
       console.error("Errore durante la creazione dell'immagine dello spotted:", error);
       alert("Non è stato possibile creare l'immagine dello spotted.");
@@ -222,8 +222,19 @@ const seguePost =
 
       {showDownloadImage && (
         <div className="post-admin-tools">
-          <button type="button" className="post-download-btn" onClick={scaricaImmagine}>
+          <button
+            type="button"
+            className="post-download-btn"
+            onClick={() => scaricaImmagine()}
+          >
             ⬇️ Scarica immagine
+          </button>
+          <button
+            type="button"
+            className="post-download-btn"
+            onClick={() => scaricaImmagine("instagram")}
+          >
+            📸 Scarica per Instagram
           </button>
         </div>
       )}
