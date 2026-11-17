@@ -793,6 +793,70 @@ details summary {
   color: #f5c542;
 }
 
+.notification-digest {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.notification-digest-label {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.notification-digest-item {
+  width: 100%;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #171b23;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-digest-item:hover,
+.notification-digest-item:focus-visible {
+  border-color: #38bdf8;
+  background: #1b2430;
+}
+
+.notification-digest-item:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.notification-digest-meta {
+  display: block;
+  color: #67e8f9;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notification-digest-text {
+  display: -webkit-box;
+  margin-top: 5px;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 15px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.notification-digest-open {
+  display: block;
+  margin-top: 6px;
+  color: #f5c542;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .notification-badge {
   background: red;
   color: white;

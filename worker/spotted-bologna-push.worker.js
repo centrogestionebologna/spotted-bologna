@@ -930,7 +930,8 @@ async function creaNotificaInterna({
   body,
   postId = null,
   notificationId = null,
-  adminOnly = false
+  adminOnly = false,
+  previews = []
 }) {
   /*
    * Con un ID esplicito la notifica viene creata una volta sola: se il
@@ -981,6 +982,40 @@ async function creaNotificaInterna({
   } else {
     fields.postId = {
       nullValue: null
+    };
+  }
+
+  if (
+    Array.isArray(previews) &&
+    previews.length > 0
+  ) {
+    fields.previews = {
+      arrayValue: {
+        values: previews.map((preview) => ({
+          mapValue: {
+            fields: {
+              postId: {
+                stringValue: String(
+                  preview.postId || ""
+                )
+              },
+              text: {
+                stringValue: String(
+                  preview.text || ""
+                )
+              },
+              createdAt: preview.createdAt
+                ? {
+                    stringValue:
+                      preview.createdAt
+                  }
+                : {
+                    nullValue: null
+                  }
+            }
+          }
+        }))
+      }
     };
   }
 
@@ -2096,6 +2131,98 @@ async function contaDocumentiCreatiDopo({
 }
 
 /*
+ * Recupera gli spotted più recenti del periodo per il riepilogo.
+ * Una sola query per riepilogo, non una per destinatario.
+ */
+async function recuperaAnteprimePost({
+  env,
+  accessToken,
+  inizioISO,
+  limite = 3
+}) {
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents:runQuery`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [
+          {
+            collectionId: "posts",
+            allDescendants: false
+          }
+        ],
+        where: {
+          fieldFilter: {
+            field: {
+              fieldPath: "createdAt"
+            },
+            op: "GREATER_THAN_OR_EQUAL",
+            value: {
+              stringValue: inizioISO
+            }
+          }
+        },
+        orderBy: [
+          {
+            field: {
+              fieldPath: "createdAt"
+            },
+            direction: "DESCENDING"
+          }
+        ],
+        limit: limite
+      }
+    })
+  });
+
+  const risultato = await risposta
+    .json()
+    .catch(() => null);
+
+  if (!risposta.ok) {
+    console.error(
+      "Errore anteprime riepilogo:",
+      risultato
+    );
+
+    return [];
+  }
+
+  if (!Array.isArray(risultato)) return [];
+
+  return risultato
+    .filter((elemento) => elemento.document)
+    .map((elemento) => {
+      const documento = elemento.document;
+      const fields = documento.fields || {};
+      const testo = valoreFirestore(fields.text);
+      const createdAt = valoreFirestore(
+        fields.createdAt
+      );
+
+      if (!testo) return null;
+
+      return {
+        postId: documento.name.split("/").pop(),
+        text: anteprimaTesto(testo, 140),
+        createdAt:
+          typeof createdAt === "string"
+            ? createdAt
+            : ""
+      };
+    })
+    .filter(Boolean);
+}
+
+/*
  * Invia il riepilogo a chi ha scelto quella frequenza.
  *
  * period: "daily" (ultime 24 ore) oppure "weekly" (ultimi 7 giorni).
@@ -2142,6 +2269,14 @@ async function eseguiRiepilogo({
       inizioISO
     });
 
+  const anteprime =
+    await recuperaAnteprimePost({
+      env,
+      accessToken,
+      inizioISO,
+      limite: 3
+    });
+
   const titolo = settimanale
     ? "📅 Riepilogo della settimana"
     : "☀️ Riepilogo di ieri";
@@ -2156,6 +2291,18 @@ async function eseguiRiepilogo({
       : settimanale
         ? `Questa settimana ${spots} nuovi spotted e ${commenti} commenti.`
         : `Ieri ${spots} nuovi spotted e ${commenti} commenti.`;
+
+  /*
+   * La push resta breve: conteggi e una sola citazione. Le altre
+   * anteprime sono nella card interna, dove c'è spazio per leggerle.
+   */
+  const corpoPush =
+    spots > 0 && anteprime[0]
+      ? `${corpo}\n“${anteprimaTesto(
+          anteprime[0].text,
+          100
+        )}”`
+      : corpo;
 
   const preferenza = settimanale
     ? "settimanale"
@@ -2181,6 +2328,8 @@ async function eseguiRiepilogo({
       inizio: inizioISO,
       titolo,
       corpo,
+      corpoPush,
+      previews: anteprime,
       spots,
       commenti,
       destinatari: destinatari.length,
@@ -2208,7 +2357,8 @@ async function eseguiRiepilogo({
           title: titolo,
           body: corpo,
           postId: null,
-          notificationId
+          notificationId,
+          previews: anteprime
         });
 
       if (!notifica) continue;
@@ -2220,7 +2370,7 @@ async function eseguiRiepilogo({
         accessToken,
         recipientUserId: profilo.uid,
         title: titolo,
-        body: corpo,
+        body: corpoPush,
         url: "/",
         notificationId,
         postId: ""
@@ -2252,6 +2402,8 @@ async function eseguiRiepilogo({
     inizio: inizioISO,
     titolo,
     corpo,
+    corpoPush,
+    previews: anteprime,
     spots,
     commenti,
     destinatari: destinatari.length,

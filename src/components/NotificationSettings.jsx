@@ -5,6 +5,7 @@ import {
   verificaNotifichePush,
   infoSupportoPush
 } from "../services/pushNotifications";
+import { scegliTemaSpotted } from "../utils/temaSpotted";
 
 /*
  * Pannello aperto dalla campanella: push, riepiloghi, preferenze sulle
@@ -366,6 +367,70 @@ function NotificationSettings({
               <strong>{notifica.title}</strong>
 
               <p>{notifica.body}</p>
+
+              {notifica.type === "digest" &&
+                Array.isArray(
+                  notifica.previews
+                ) &&
+                notifica.previews.length >
+                  0 && (
+                  <div className="notification-digest">
+                    <span className="notification-digest-label">
+                      In evidenza
+                    </span>
+
+                    {notifica.previews.map(
+                      (preview) => {
+                        if (
+                          !preview?.postId ||
+                          !preview?.text
+                        ) {
+                          return null;
+                        }
+
+                        const temaPreview =
+                          scegliTemaSpotted(
+                            preview.text
+                          );
+
+                        return (
+                          <button
+                            type="button"
+                            key={`${notifica.id}-${preview.postId}`}
+                            className="notification-digest-item"
+                            onClick={(event) => {
+                              event.stopPropagation();
+
+                              if (
+                                typeof apriSpotted ===
+                                "function"
+                              ) {
+                                apriSpotted(
+                                  preview.postId
+                                );
+                              }
+                            }}
+                          >
+                            <span className="notification-digest-meta">
+                              {temaPreview.icona}{" "}
+                              {temaPreview.localita}{" "}
+                              ·{" "}
+                              {temaPreview.etichetta}
+                            </span>
+
+                            <span className="notification-digest-text">
+                              “{preview.text}”
+                            </span>
+
+                            <span className="notification-digest-open">
+                              Leggi →
+                            </span>
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+                )}
 
               <small>
                 {new Date(
