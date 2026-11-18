@@ -4050,8 +4050,9 @@ details summary {
 }
 
 .question-option {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid #334155;
@@ -4068,15 +4069,20 @@ details summary {
     box-shadow 0.2s ease;
 }
 
-.question-option input {
-  flex: 0 0 auto;
+.question-option input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  flex: none;
   margin: 3px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   accent-color: #f4c542;
 }
 
 .question-option-text {
-  flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .question-option-check {
