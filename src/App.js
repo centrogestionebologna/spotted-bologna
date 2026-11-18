@@ -48,6 +48,10 @@ import {
 } from "./services/pushSender";
 
 import {
+  pubblicaSpottedSuInstagram
+} from "./services/instagramPublisher";
+
+import {
   ascoltaNotificheInPrimoPiano,
   mostraNotificaInPrimoPiano,
   sincronizzaTokenPush,
@@ -1875,6 +1879,13 @@ const approvaPost = async (post) => {
     reportedBy: []
   };
 
+  /*
+   * Serve al pannello admin per pubblicare su Instagram lo spotted
+   * appena creato: quando non c'e' un originalId l'ID lo assegna
+   * Firestore.
+   */
+  let postIdPubblicato = originalId || "";
+
   if (originalId) {
 
     // spotted rimosso dalla community: riuso il suo id originale,
@@ -1899,6 +1910,8 @@ const approvaPost = async (post) => {
       datiDaPubblicare
     );
 
+    postIdPubblicato = postRef.id;
+
     await notificaAmministratori({
       type: "new-post",
       title: "📝 Nuovo spotted pubblicato",
@@ -1921,6 +1934,44 @@ const approvaPost = async (post) => {
   caricaPost();
   caricaPendingPosts();
 
+  return { postId: postIdPubblicato };
+};
+
+/*
+ * Approvazione con pubblicazione su Instagram.
+ *
+ * Prima pubblica sul profilo e solo dopo approva lo spotted: se
+ * Instagram rifiuta, lo spotted resta in coda e l'admin puo' correggere
+ * o riprovare, senza ritrovarselo approvato e senza pubblicazione.
+ */
+const pubblicaSpottedAncheSuInstagram = async (
+  post,
+  caption,
+  immagineBase64
+) => {
+  const risultato = await pubblicaSpottedSuInstagram({
+    postId: post.id,
+    caption,
+    immagineBase64
+  });
+
+  await approvaPost(
+    risultato.instagram
+      ? { ...post, instagram: risultato.instagram }
+      : post
+  );
+
+  alert(
+    risultato.giaPubblicato
+      ? "Questo spotted era già stato pubblicato su Instagram."
+      : `Spotted pubblicato su Instagram.${
+          risultato.permalink
+            ? `\n\n${risultato.permalink}`
+            : ""
+        }`
+  );
+
+  return risultato;
 };
 
 const rifiutaPost = async (id) => {
@@ -4239,6 +4290,9 @@ return (
     pendingPosts={pendingPosts}
     approvaPost={approvaPost}
     rifiutaPost={rifiutaPost}
+    pubblicaInstagram={
+      pubblicaSpottedAncheSuInstagram
+    }
   />
 
 </details>

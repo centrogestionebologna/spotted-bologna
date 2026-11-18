@@ -1,6 +1,13 @@
 const encoder = new TextEncoder();
 
 /*
+ * Instagram: versione dell'API e giorni dopo i quali il token di
+ * accesso (valido 60 giorni) viene rinnovato dal cron.
+ */
+const VERSIONE_API_INSTAGRAM = "v27.0";
+const GIORNI_PRIMA_DEL_RINNOVO = 40;
+
+/*
  * Converte una stringa o un ArrayBuffer nel formato Base64 URL-safe
  * richiesto dai JWT.
  */
@@ -821,6 +828,461 @@ async function leggiDocumentoConServiceAccount({
   }
 
   return risultato;
+}
+
+/*
+ * Scrive o aggiorna un documento Firestore con il service account.
+ */
+async function scriviDocumentoConServiceAccount({
+  env,
+  accessToken,
+  percorso,
+  fields,
+  campiAggiornati = []
+}) {
+  const maschera = campiAggiornati.length
+    ? `?${campiAggiornati
+        .map(
+          (campo) =>
+            `updateMask.fieldPaths=${encodeURIComponent(
+              campo
+            )}`
+        )
+        .join("&")}`
+    : "";
+
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents/${percorso}${maschera}`;
+
+  const risposta = await fetch(endpoint, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ fields })
+  });
+
+  if (!risposta.ok) {
+    console.error(
+      "Errore scrittura documento Firestore:",
+      await risposta.text()
+    );
+
+    throw new Error(
+      "Impossibile salvare i dati su Firestore."
+    );
+  }
+
+  return risposta.json();
+}
+
+/* ------------------------------------------------------------------ *
+ * Instagram
+ * ------------------------------------------------------------------ */
+
+async function leggiConfigurazioneInstagram({
+  env,
+  accessToken
+}) {
+  try {
+    const documento =
+      await leggiDocumentoConServiceAccount({
+        env,
+        accessToken,
+        percorso: "config/instagram"
+      });
+
+    if (!documento) {
+      return null;
+    }
+
+    return {
+      token: valoreFirestore(
+        documento.fields?.accessToken
+      ),
+      rinnovatoIl: valoreFirestore(
+        documento.fields?.rinnovatoIl
+      )
+    };
+  } catch (errore) {
+    console.warn(
+      "Configurazione Instagram non leggibile:",
+      errore
+    );
+
+    return null;
+  }
+}
+
+/*
+ * Il token rinnovato non puo' essere scritto nei secret del Worker,
+ * quindi vive su Firestore e ha la precedenza su quello nei secret.
+ */
+async function tokenInstagram({ env, accessToken }) {
+  const configurazione =
+    await leggiConfigurazioneInstagram({
+      env,
+      accessToken
+    });
+
+  return (
+    configurazione?.token ||
+    env.INSTAGRAM_ACCESS_TOKEN ||
+    ""
+  );
+}
+
+/*
+ * Il token di Instagram dura 60 giorni: il cron lo rinnova prima della
+ * scadenza, altrimenti la pubblicazione si fermerebbe in silenzio.
+ */
+async function rinnovaTokenInstagramSeNecessario(env) {
+  try {
+    const serviceAccount = JSON.parse(
+      env.FIREBASE_SERVICE_ACCOUNT
+    );
+
+    const accessToken =
+      await ottieniAccessToken(serviceAccount);
+
+    const configurazione =
+      await leggiConfigurazioneInstagram({
+        env,
+        accessToken
+      });
+
+    const tokenAttuale =
+      configurazione?.token ||
+      env.INSTAGRAM_ACCESS_TOKEN ||
+      "";
+
+    if (!tokenAttuale) {
+      return null;
+    }
+
+    const rinnovatoIl = configurazione?.rinnovatoIl
+      ? Date.parse(configurazione.rinnovatoIl)
+      : 0;
+
+    if (
+      Number.isFinite(rinnovatoIl) &&
+      rinnovatoIl > 0 &&
+      Date.now() - rinnovatoIl <
+        GIORNI_PRIMA_DEL_RINNOVO * 86400000
+    ) {
+      return tokenAttuale;
+    }
+
+    const risposta = await fetch(
+      "https://graph.instagram.com/refresh_access_token" +
+        `?grant_type=ig_refresh_token` +
+        `&access_token=${encodeURIComponent(
+          tokenAttuale
+        )}`
+    );
+
+    const risultato = await risposta.json();
+
+    if (
+      !risposta.ok ||
+      !risultato.access_token
+    ) {
+      console.error(
+        "Rinnovo token Instagram non riuscito:",
+        risultato
+      );
+
+      return tokenAttuale;
+    }
+
+    await scriviDocumentoConServiceAccount({
+      env,
+      accessToken,
+      percorso: "config/instagram",
+      campiAggiornati: [
+        "accessToken",
+        "rinnovatoIl",
+        "scadeIl"
+      ],
+      fields: {
+        accessToken: {
+          stringValue: risultato.access_token
+        },
+        rinnovatoIl: {
+          stringValue: new Date().toISOString()
+        },
+        scadeIl: {
+          stringValue: new Date(
+            Date.now() +
+              (Number(risultato.expires_in) ||
+                5184000) *
+                1000
+          ).toISOString()
+        }
+      }
+    });
+
+    return risultato.access_token;
+  } catch (errore) {
+    console.error(
+      "Errore rinnovo token Instagram:",
+      errore
+    );
+
+    return null;
+  }
+}
+
+function base64InBytes(base64) {
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+
+  for (let i = 0; i < binario.length; i += 1) {
+    bytes[i] = binario.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
+function messaggioErroreInstagram(risultato) {
+  const errore = risultato?.error;
+
+  if (!errore) {
+    return "Instagram ha rifiutato la pubblicazione.";
+  }
+
+  return (
+    errore.error_user_msg ||
+    errore.message ||
+    "Instagram ha rifiutato la pubblicazione."
+  );
+}
+
+/*
+ * Pubblica lo spotted su Instagram: salva la card, la espone a un URL
+ * pubblico (Instagram scarica l'immagine da li') e chiama media +
+ * media_publish.
+ */
+async function pubblicaSuInstagram({
+  env,
+  accessToken,
+  origin,
+  postId,
+  caption,
+  immagineBase64,
+  token
+}) {
+  /*
+   * Lo spotted puo' essere ancora in attesa di approvazione: in quel
+   * caso la card viene pubblicata su Instagram e il mediaId finisce sul
+   * documento pending, cosi' l'approvazione lo copia nel post e un
+   * secondo tentativo non pubblica due volte.
+   */
+  let percorsoDocumento =
+    `posts/${encodeURIComponent(postId)}`;
+
+  let documentoPost =
+    await leggiDocumentoConServiceAccount({
+      env,
+      accessToken,
+      percorso: percorsoDocumento
+    });
+
+  if (!documentoPost) {
+    percorsoDocumento =
+      `pendingPosts/${encodeURIComponent(postId)}`;
+
+    documentoPost =
+      await leggiDocumentoConServiceAccount({
+        env,
+        accessToken,
+        percorso: percorsoDocumento
+      });
+  }
+
+  if (!documentoPost) {
+    const errore = new Error(
+      "Lo spotted non esiste più: potrebbe essere stato rifiutato."
+    );
+
+    errore.status = 404;
+    throw errore;
+  }
+
+  const campiInstagram =
+    documentoPost.fields?.instagram?.mapValue
+      ?.fields || {};
+
+  const mediaEsistente = valoreFirestore(
+    campiInstagram.mediaId
+  );
+
+  if (mediaEsistente) {
+    const permalinkEsistente =
+      valoreFirestore(campiInstagram.permalink) || "";
+
+    return {
+      mediaId: mediaEsistente,
+      permalink: permalinkEsistente,
+      instagram: {
+        mediaId: mediaEsistente,
+        permalink: permalinkEsistente,
+        caption:
+          valoreFirestore(campiInstagram.caption) || "",
+        publishedAt:
+          valoreFirestore(
+            campiInstagram.publishedAt
+          ) || ""
+      },
+      giaPubblicato: true
+    };
+  }
+
+  await scriviDocumentoConServiceAccount({
+    env,
+    accessToken,
+    percorso: `instagramMedia/${encodeURIComponent(
+      postId
+    )}`,
+    campiAggiornati: [
+      "postId",
+      "jpegBase64",
+      "createdAt"
+    ],
+    fields: {
+      postId: { stringValue: postId },
+      jpegBase64: {
+        stringValue: immagineBase64
+      },
+      createdAt: {
+        stringValue: new Date().toISOString()
+      }
+    }
+  });
+
+  const imageUrl =
+    `${origin}/media/${encodeURIComponent(postId)}.jpg`;
+
+  const creazione = await fetch(
+    `https://graph.instagram.com/` +
+      `${VERSIONE_API_INSTAGRAM}/me/media`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        image_url: imageUrl,
+        caption,
+        access_token: token
+      })
+    }
+  );
+
+  const contenitore = await creazione.json();
+
+  if (!creazione.ok || !contenitore.id) {
+    console.error(
+      "Instagram ha rifiutato il contenitore:",
+      contenitore
+    );
+
+    throw new Error(
+      messaggioErroreInstagram(contenitore)
+    );
+  }
+
+  const pubblicazione = await fetch(
+    `https://graph.instagram.com/` +
+      `${VERSIONE_API_INSTAGRAM}/me/media_publish`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        creation_id: contenitore.id,
+        access_token: token
+      })
+    }
+  );
+
+  const pubblicato = await pubblicazione.json();
+
+  if (!pubblicazione.ok || !pubblicato.id) {
+    console.error(
+      "Instagram non ha pubblicato il contenitore:",
+      pubblicato
+    );
+
+    throw new Error(
+      messaggioErroreInstagram(pubblicato)
+    );
+  }
+
+  let permalink = "";
+
+  try {
+    const informazioni = await fetch(
+      `https://graph.instagram.com/` +
+        `${VERSIONE_API_INSTAGRAM}/` +
+        `${encodeURIComponent(pubblicato.id)}` +
+        `?fields=permalink` +
+        `&access_token=${encodeURIComponent(token)}`
+    );
+
+    const dati = await informazioni.json();
+    permalink = dati.permalink || "";
+  } catch (errore) {
+    console.warn(
+      "Permalink Instagram non recuperato:",
+      errore
+    );
+  }
+
+  const datiInstagram = {
+    mediaId: pubblicato.id,
+    permalink,
+    caption,
+    publishedAt: new Date().toISOString()
+  };
+
+  await scriviDocumentoConServiceAccount({
+    env,
+    accessToken,
+    percorso: percorsoDocumento,
+    campiAggiornati: ["instagram"],
+    fields: {
+      instagram: {
+        mapValue: {
+          fields: {
+            mediaId: {
+              stringValue: datiInstagram.mediaId
+            },
+            permalink: {
+              stringValue: datiInstagram.permalink
+            },
+            caption: {
+              stringValue: datiInstagram.caption
+            },
+            publishedAt: {
+              stringValue:
+                datiInstagram.publishedAt
+            }
+          }
+        }
+      }
+    }
+  });
+
+  return {
+    mediaId: datiInstagram.mediaId,
+    permalink: datiInstagram.permalink,
+    instagram: datiInstagram
+  };
 }
 
 async function recuperaAmministratori({
@@ -2473,10 +2935,26 @@ export default {
       );
     });
 
+    /*
+     * Il token Instagram scade dopo 60 giorni: lo rinnoviamo con lo
+     * stesso cron dei riepiloghi, senza bloccare l'invio.
+     */
+    const manutenzioneInstagram =
+      rinnovaTokenInstagramSeNecessario(env).catch(
+        (errore) => {
+          console.error(
+            "Errore manutenzione Instagram:",
+            errore
+          );
+        }
+      );
+
     if (ctx?.waitUntil) {
       ctx.waitUntil(esecuzione);
+      ctx.waitUntil(manutenzioneInstagram);
     } else {
       await esecuzione;
+      await manutenzioneInstagram;
     }
   },
 
@@ -2626,6 +3104,76 @@ export default {
           origin,
           env
         );
+      }
+    }
+
+    /*
+     * Immagine pubblica della card: e' l'URL che Instagram scarica
+     * quando crea il contenitore. La stessa immagine finisce sul
+     * profilo, quindi non c'e' nulla di privato da proteggere.
+     */
+    if (
+      (request.method === "GET" ||
+        request.method === "HEAD") &&
+      urlRichiesta.pathname.startsWith("/media/") &&
+      urlRichiesta.pathname.endsWith(".jpg")
+    ) {
+      const postId = urlRichiesta.pathname.slice(
+        "/media/".length,
+        -".jpg".length
+      );
+
+      if (!/^[A-Za-z0-9_-]+$/.test(postId)) {
+        return new Response("Not found", {
+          status: 404
+        });
+      }
+
+      try {
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const documento =
+          await leggiDocumentoConServiceAccount({
+            env,
+            accessToken,
+            percorso:
+              `instagramMedia/${encodeURIComponent(
+                postId
+              )}`
+          });
+
+        const base64 = valoreFirestore(
+          documento?.fields?.jpegBase64
+        );
+
+        if (!base64) {
+          return new Response("Not found", {
+            status: 404
+          });
+        }
+
+        return new Response(base64InBytes(base64), {
+          status: 200,
+          headers: {
+            "Content-Type": "image/jpeg",
+            "Cache-Control":
+              "public, max-age=31536000, immutable"
+          }
+        });
+      } catch (errore) {
+        console.error(
+          "Errore immagine Instagram:",
+          errore
+        );
+
+        return new Response("Errore immagine", {
+          status: 500
+        });
       }
     }
 
@@ -5144,6 +5692,287 @@ if (
               "Errore durante il riepilogo."
           },
           500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Dice al pannello admin se il Worker ha un token Instagram
+     * utilizzabile.
+     */
+    if (
+      request.method === "GET" &&
+      urlRichiesta.pathname === "/instagram/config"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono pubblicare su Instagram."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const configurazione =
+          await leggiConfigurazioneInstagram({
+            env,
+            accessToken
+          });
+
+        return rispostaJson(
+          {
+            success: true,
+            configured: Boolean(
+              configurazione?.token ||
+                env.INSTAGRAM_ACCESS_TOKEN
+            ),
+            rinnovatoIl:
+              configurazione?.rinnovatoIl || null
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/config:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore configurazione Instagram."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Pubblica su Instagram lo spotted appena approvato.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname === "/instagram/publish"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono pubblicare su Instagram."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const postId = String(
+          corpo.postId || ""
+        ).trim();
+
+        const caption = String(
+          corpo.caption || ""
+        ).slice(0, 2200);
+
+        const immagineBase64 = String(
+          corpo.imageBase64 || ""
+        )
+          .replace(/^data:[^;]+;base64,/, "")
+          .replace(/\s/g, "");
+
+        if (!postId || !immagineBase64) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Post o immagine mancanti."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (!/^[A-Za-z0-9_-]+$/.test(postId)) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "ID post non valido."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (!immagineBase64.startsWith("/9j/")) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Instagram accetta solo immagini JPEG."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (immagineBase64.length > 850000) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Immagine troppo pesante per la pubblicazione."
+            },
+            413,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const token = await tokenInstagram({
+          env,
+          accessToken
+        });
+
+        if (!token) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Instagram non è configurato: manca il token di accesso nel Worker."
+            },
+            503,
+            origin,
+            env
+          );
+        }
+
+        const risultato = await pubblicaSuInstagram({
+          env,
+          accessToken,
+          origin: urlRichiesta.origin,
+          postId,
+          caption,
+          immagineBase64,
+          token
+        });
+
+        return rispostaJson(
+          {
+            success: true,
+            ...risultato
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/publish:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante la pubblicazione su Instagram."
+          },
+          errore.status || 500,
           origin,
           env
         );
