@@ -4051,10 +4051,14 @@ details summary {
 
 .question-option {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: start;
+  grid-template-columns: 22px minmax(0, 1fr) 18px;
+  align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 14px;
   border: 1px solid #334155;
   border-radius: 12px;
   background: #0d1117;
@@ -4069,20 +4073,43 @@ details summary {
     box-shadow 0.2s ease;
 }
 
+/* Radio disegnato qui: non eredita width/padding globali degli input. */
 .question-option input[type="radio"] {
-  width: 18px;
-  height: 18px;
-  flex: none;
-  margin: 3px 0 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  accent-color: #f4c542;
+  appearance: none;
+  -webkit-appearance: none;
+  justify-self: start;
+  width: 18px !important;
+  min-width: 18px;
+  max-width: 18px;
+  height: 18px !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 2px solid #f4c542;
+  border-radius: 50%;
+  background: #0d1117;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.question-option input[type="radio"]:checked {
+  background: #f4c542;
+  box-shadow: inset 0 0 0 3px #0d1117;
+}
+
+.question-option input[type="radio"]:focus-visible {
+  outline: 2px solid #67e8f9;
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
 .question-option-text {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  text-align: center;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .question-option-check {
