@@ -25,6 +25,13 @@ function Post({
   const [showLikes, setShowLikes] = useState(false);
 
   const isGroupProposal = post.type === "groupProposal";
+  const isQuestionAnswer =
+    post.type === "questionAnswer" ||
+    Boolean(post.questionText);
+
+  const testoCondivisione = isQuestionAnswer
+    ? `💬 ${post.questionText || "Domanda"}\n\n${post.text}`
+    : post.text;
 
   const postLikes = likes.filter((like) => like.postId === post.id);
   const likesCount = postLikes.length;
@@ -66,12 +73,12 @@ const seguePost =
     try {
       if (navigator.share) {
         await navigator.share({
-          text: post.text,
+          text: testoCondivisione,
           url: window.location.origin
         });
       } else {
         await navigator.clipboard.writeText(
-          `${post.text}\n\n${window.location.origin}`
+          `${testoCondivisione}\n\n${window.location.origin}`
         );
         alert("Link copiato!");
       }
@@ -122,7 +129,33 @@ const seguePost =
         </h3>
       )}
 
-      <p>{post.text}</p>
+      {isQuestionAnswer ? (
+        <div className="post-question-answer">
+          <span className="post-question-answer-label">
+            💬 Spotted · risposta a una domanda
+          </span>
+
+          <div className="post-question-block">
+            <span className="post-question-label">
+              Domanda
+            </span>
+            <p className="post-question-text">
+              “{post.questionText || "Domanda della community"}”
+            </p>
+          </div>
+
+          <div className="post-answer-block">
+            <span className="post-answer-label">
+              Risposta anonima
+            </span>
+            <p className="post-answer-text">
+              {post.text}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p>{post.text}</p>
+      )}
 
       {post.createdAt && (
         <p style={{ fontSize: "12px", color: "#999", marginTop: "8px" }}>

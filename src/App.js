@@ -8,6 +8,7 @@ import { analizzaPubblicita } from "./utils/moderazione";
 import Post from "./components/Post";
 import NicknameSettings from "./components/NicknameSettings";
 import NotificationSettings from "./components/NotificationSettings";
+import QuestionBox from "./components/QuestionBox";
 
 import "./App.css";
 
@@ -1358,6 +1359,57 @@ const verificaNotificheOnboarding = async () => {
   } finally {
     setVerificaPushOnboarding(false);
   }
+};
+
+const pubblicaRispostaDomanda = async (
+  domanda,
+  risposta
+) => {
+  const testo = String(risposta || "").trim();
+
+  if (!domanda?.id || !testo) {
+    throw new Error(
+      "Scegli una domanda e scrivi una risposta."
+    );
+  }
+
+  if (testo.length > 500) {
+    throw new Error("Massimo 500 caratteri.");
+  }
+
+  /*
+   * La risposta è uno spotted a tutti gli effetti: finisce nella
+   * stessa collezione del feed, senza autore e con la domanda allegata.
+   */
+  const nuovoPost = {
+    text: testo,
+    questionId: domanda.id,
+    questionText: String(domanda.text || "").slice(
+      0,
+      200
+    ),
+    type: "questionAnswer",
+    authorId: "anonimo",
+    createdAt: new Date().toISOString(),
+    status: "published",
+    reports: 0,
+    reportedBy: [],
+    flagReason: null
+  };
+
+  const postRef = await addDoc(
+    collection(db, "posts"),
+    nuovoPost
+  );
+
+  caricaPost().catch((erroreRicaricamento) => {
+    console.warn(
+      "Risposta pubblicata, feed non ricaricato:",
+      erroreRicaricamento
+    );
+  });
+
+  return postRef.id;
 };
 
 const inviaSpotted = async () => {
@@ -3984,99 +4036,99 @@ return (
 {user && (!savedNickname || passoNotifiche) ? null : (
 <>
 
-<div className="section-card">
+<div className="section-card spotted-composer">
 
-  <h2>📩 Invia uno Spotted</h2>
+  <div className="composer-head">
+    <div>
+      <span className="composer-eyebrow">
+        Community anonima
+      </span>
+      <h2>📩 Invia uno Spotted</h2>
+    </div>
 
-<textarea
-  rows="4"
-  cols="50"
-  value={spottedText}
-  onChange={(e) =>
-    setSpottedText(e.target.value)
-  }
-  placeholder="Scrivi il tuo spotted anonimo..."
-/>
+    <span className="composer-anon-badge">
+      🕶️ Anonimo
+    </span>
+  </div>
 
-<p
-  style={{
-    fontSize: "12px",
-    color: "#999"
-  }}
->
-  {spottedText.length}/1000
-</p>
-
-{analisiPubblicitaSpotted.rilevata && (
-  <p className="spotted-ad-warning" role="status">
-    🛡️ Contiene link, contatti o linguaggio promozionale:
-    lo spotted verrà inviato in moderazione.
+  <p className="composer-intro">
+    Scrivi liberamente: il tuo nome non viene mostrato.
+    Se lo spotted contiene link, contatti o promozioni,
+    passerà prima dalla moderazione.
   </p>
-)}
 
-<div
-  style={{
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: "15px"
-  }}
->
+  <div className="composer-editor">
+    <textarea
+      className="composer-textarea"
+      rows="5"
+      value={spottedText}
+      maxLength={1000}
+      onChange={(e) =>
+        setSpottedText(e.target.value)
+      }
+      placeholder="Scrivi il tuo spotted anonimo..."
+    />
 
-  <button onClick={inviaSpotted}>
-    Invia Spotted
-  </button>
+    <span className="composer-count">
+      {spottedText.length}/1000
+    </span>
+  </div>
 
-<div
-  style={{
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: "8px"
-  }}
->
+  {analisiPubblicitaSpotted.rilevata && (
+    <p className="spotted-ad-warning" role="status">
+      🛡️ Contiene link, contatti o linguaggio promozionale:
+      lo spotted verrà inviato in moderazione.
+    </p>
+  )}
 
-{user && (
-  <span
-    onClick={() =>
-      setMostraPropostaGruppo(
-        !mostraPropostaGruppo
-      )
-    }
-    style={{
-      cursor: "pointer",
-      color: "#ffffff",
-      fontSize: "14px",
-      fontWeight: "500",
-      textDecoration: "underline"
-    }}
-  >
-    + Proponi gruppo
-  </span>
-)}
+  <div className="composer-actions">
+    <button
+      type="button"
+      className="composer-submit"
+      onClick={inviaSpotted}
+    >
+      🚀 Invia Spotted
+    </button>
 
-{isAdmin && (
-  <span
-    onClick={() =>
-      setMostraComunicazioneServizio(
-        !mostraComunicazioneServizio
-      )
-    }
-    style={{
-      cursor: "pointer",
-      color: "#f4c542",
-      fontSize: "14px",
-      fontWeight: "600",
-      textDecoration: "underline"
-    }}
-  >
-    + Comunicazione di servizio
-  </span>
-)}
+    <div className="composer-links">
+      {user && (
+        <button
+          type="button"
+          className="composer-link"
+          onClick={() =>
+            setMostraPropostaGruppo(
+              !mostraPropostaGruppo
+            )
+          }
+        >
+          + Proponi gruppo
+        </button>
+      )}
+
+      {isAdmin && (
+        <button
+          type="button"
+          className="composer-link composer-link-admin"
+          onClick={() =>
+            setMostraComunicazioneServizio(
+              !mostraComunicazioneServizio
+            )
+          }
+        >
+          + Comunicazione di servizio
+        </button>
+      )}
+    </div>
+  </div>
 
 </div>
 
-</div>
+<QuestionBox
+  user={user}
+  isAdmin={isAdmin}
+  nickname={savedNickname}
+  pubblicaRisposta={pubblicaRispostaDomanda}
+/>
 
 {user && mostraPropostaGruppo && (
 <div className="section-card">
@@ -4207,7 +4259,8 @@ return (
 </div>
 )}
 
-</div>
+  </>
+)}
 
 {user && savedNickname && isAdmin && (
   <>
@@ -4741,9 +4794,6 @@ setRicercaSpotted(e.target.value)
   >
     Mostra altri spotted
   </button>
-)}
-
-</>
 )}
 
     </div>
