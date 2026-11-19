@@ -1,4 +1,5 @@
 import { scegliTemaSpotted } from "./temaSpotted";
+import { scegliModelloVerticale } from "./modelliSpottedVerticale";
 
 const INVITO_ACCESSO =
   "Accedi per visualizzare commenti e like! Link in descrizione al profilo Instagram";
@@ -355,94 +356,600 @@ export async function creaImmagineSpotted(
     );
   }
 
-  const canvas = document.createElement("canvas");
-  const width = 900;
-  const cardX = 80;
-  const cardY = 350;
-  const cardWidth = 740;
-  const padding = 44;
-  const textX = cardX + padding;
-  const maxTextWidth = cardWidth - padding * 2;
-  const fontSize = 54;
-  const lineHeight = 66;
-  const testo = String(post.text || "").trim();
+  return creaImmagineSpottedVerticale(post);
+}
 
-  let context = canvas.getContext("2d");
+const disegnaCuore = (
+  context,
+  centroX,
+  centroY,
+  larghezza,
+  colore
+) => {
+  const scala = larghezza / 34;
 
-  if (!context) {
-    throw new Error("Canvas non disponibile");
+  context.save();
+  context.beginPath();
+
+  for (let passo = 0; passo <= 360; passo += 3) {
+    const t = (passo * Math.PI) / 180;
+    const x = 16 * Math.sin(t) ** 3;
+    const y =
+      13 * Math.cos(t) -
+      5 * Math.cos(2 * t) -
+      2 * Math.cos(3 * t) -
+      Math.cos(4 * t);
+    const puntoX = centroX + x * scala;
+    const puntoY = centroY - y * scala;
+
+    if (passo === 0) {
+      context.moveTo(puntoX, puntoY);
+    } else {
+      context.lineTo(puntoX, puntoY);
+    }
   }
 
-  const tema = scegliTemaSpotted(
-    testo,
-    post.id || ""
+  context.closePath();
+  context.fillStyle = colore;
+  context.fill();
+  context.restore();
+};
+
+const scriviTracciato = (
+  context,
+  testo,
+  x,
+  y,
+  font,
+  traccia
+) => {
+  const fontPrecedente = context.font;
+  let cursore = x;
+
+  context.font = font;
+
+  Array.from(testo).forEach((carattere) => {
+    context.fillText(carattere, cursore, y);
+    cursore +=
+      context.measureText(carattere).width + traccia;
+  });
+
+  context.font = fontPrecedente;
+};
+
+const disegnaTestoSuArco = (
+  context,
+  testo,
+  centroX,
+  centroY,
+  raggio,
+  angoloCentro,
+  verso,
+  font,
+  colore,
+  traccia
+) => {
+  context.save();
+  context.font = font;
+  context.fillStyle = colore;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
+  const caratteri = Array.from(testo);
+  const larghezze = caratteri.map(
+    (carattere) =>
+      context.measureText(carattere).width + traccia
   );
-  const isGroupProposal =
-    post.type === "groupProposal";
-  const requiredLikes = Math.max(
+  const totale = larghezze.reduce(
+    (somma, larghezza) => somma + larghezza,
+    0
+  );
+  const ampiezza = totale / raggio;
+  let angolo =
+    angoloCentro - (ampiezza / 2) * verso;
+
+  caratteri.forEach((carattere, indice) => {
+    const larghezza = larghezze[indice];
+    const angoloCarattere =
+      angolo + (larghezza / raggio / 2) * verso;
+    const x =
+      centroX + Math.cos(angoloCarattere) * raggio;
+    const y =
+      centroY + Math.sin(angoloCarattere) * raggio;
+
+    context.save();
+    context.translate(x, y);
+    context.rotate(
+      angoloCarattere + (Math.PI / 2) * verso
+    );
+    context.fillText(carattere, 0, 0);
+    context.restore();
+
+    angolo += (larghezza / raggio) * verso;
+  });
+
+  context.restore();
+};
+
+const disegnaTorri = (
+  context,
+  centroX,
+  centroY,
+  raggio
+) => {
+  const terra = centroY + 56;
+
+  context.save();
+  context.beginPath();
+  context.arc(
+    centroX,
+    centroY,
+    raggio,
+    0,
+    Math.PI * 2
+  );
+  context.clip();
+  context.strokeStyle = "rgba(255,255,255,0.92)";
+  context.lineWidth = 1.7;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  context.beginPath();
+  context.moveTo(centroX - 94, terra);
+  context.lineTo(centroX + 94, terra);
+  context.stroke();
+
+  const torreX = centroX + 8;
+  const torreY = terra - 116;
+  const torreLarghezza = 30;
+  const torreAltezza = 116;
+
+  context.strokeRect(
+    torreX,
+    torreY,
+    torreLarghezza,
+    torreAltezza
+  );
+
+  context.beginPath();
+
+  for (let indice = 0; indice < 4; indice += 1) {
+    context.rect(
+      torreX - 2 + indice * 9,
+      torreY - 7,
+      5,
+      7
+    );
+  }
+
+  context.stroke();
+
+  for (let riga = 0; riga < 6; riga += 1) {
+    for (let colonna = 0; colonna < 3; colonna += 1) {
+      context.strokeRect(
+        torreX + 5 + colonna * 8,
+        torreY + 12 + riga * 16,
+        4,
+        7
+      );
+    }
+  }
+
+  context.beginPath();
+  context.moveTo(torreX + 11, terra);
+  context.lineTo(torreX + 11, terra - 10);
+  context.arc(
+    torreX + 15,
+    terra - 10,
+    4,
+    Math.PI,
+    0
+  );
+  context.lineTo(torreX + 19, terra);
+  context.stroke();
+
+  context.save();
+  context.translate(centroX - 42, terra);
+  context.rotate(-0.13);
+
+  const larghezzaGarisenda = 24;
+  const altezzaGarisenda = 86;
+
+  context.strokeRect(
+    -larghezzaGarisenda / 2,
+    -altezzaGarisenda,
+    larghezzaGarisenda,
+    altezzaGarisenda
+  );
+
+  context.beginPath();
+
+  for (let indice = 0; indice < 3; indice += 1) {
+    context.rect(
+      -larghezzaGarisenda / 2 -
+        2 +
+        indice * 9,
+      -altezzaGarisenda - 6,
+      5,
+      6
+    );
+  }
+
+  context.stroke();
+
+  for (let riga = 0; riga < 4; riga += 1) {
+    for (let colonna = 0; colonna < 2; colonna += 1) {
+      context.strokeRect(
+        -larghezzaGarisenda / 2 +
+          5 +
+          colonna * 9,
+        -altezzaGarisenda + 12 + riga * 16,
+        4,
+        7
+      );
+    }
+  }
+
+  context.restore();
+
+  context.strokeRect(
+    centroX - 92,
+    terra - 34,
+    38,
+    34
+  );
+
+  for (let indice = 0; indice < 3; indice += 1) {
+    const centroArco = centroX - 83 + indice * 10;
+
+    context.beginPath();
+    context.moveTo(centroArco - 4, terra);
+    context.lineTo(centroArco - 4, terra - 12);
+    context.arc(
+      centroArco,
+      terra - 12,
+      4,
+      Math.PI,
+      0
+    );
+    context.lineTo(centroArco + 4, terra);
+    context.stroke();
+  }
+
+  context.restore();
+};
+
+const disegnaSigillo = (
+  context,
+  centroX,
+  centroY,
+  raggio
+) => {
+  context.save();
+  context.strokeStyle = "rgba(255,255,255,0.95)";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.arc(
+    centroX,
+    centroY,
+    raggio,
+    0,
+    Math.PI * 2
+  );
+  context.stroke();
+
+  context.lineWidth = 1.2;
+  context.beginPath();
+  context.arc(
+    centroX,
+    centroY,
+    raggio - 7,
+    0,
+    Math.PI * 2
+  );
+  context.stroke();
+
+  context.beginPath();
+  context.arc(
+    centroX,
+    centroY,
+    raggio - 40,
+    0,
+    Math.PI * 2
+  );
+  context.stroke();
+
+  disegnaTestoSuArco(
+    context,
+    "SPOTTED BOLOGNA OFFICIAL",
+    centroX,
+    centroY,
+    raggio - 20,
+    -Math.PI / 2,
     1,
-    Number(post.requiredLikes) || 10
+    "700 15px Arial, sans-serif",
+    "rgba(255,255,255,0.96)",
+    2.2
   );
-  const obiettivoRaggiunto =
-    Boolean(post.unlockedAt) ||
-    likesCount >= requiredLikes;
-  const statoGruppo = obiettivoRaggiunto
-    ? "Obiettivo raggiunto: il link è disponibile."
-    : "Il link si sblocca al raggiungimento dell'obiettivo.";
 
-  context.font = `700 ${fontSize}px Arial, sans-serif`;
-  const lineCount = contaRigheTesto(
+  disegnaTestoSuArco(
     context,
-    testo,
-    maxTextWidth
+    "UNIVERSITÀ DI BOLOGNA",
+    centroX,
+    centroY,
+    raggio - 20,
+    Math.PI / 2,
+    -1,
+    "700 10.5px Arial, sans-serif",
+    "rgba(255,255,255,0.92)",
+    2
   );
 
-  context.font = "700 27px Arial, sans-serif";
-  const invitoRighe = contaRigheTesto(
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillStyle = "rgba(255,255,255,0.95)";
+  context.font = "700 15px Arial, sans-serif";
+  context.letterSpacing = "2px";
+  context.fillText(
+    "A.D. 2026",
+    centroX,
+    centroY + 84
+  );
+  context.letterSpacing = "0px";
+
+  disegnaTorri(
     context,
-    INVITO_ACCESSO,
-    maxTextWidth
+    centroX,
+    centroY,
+    raggio - 40
+  );
+  context.restore();
+};
+
+const disegnaIntestazione = (context) => {
+  context.save();
+  disegnaSigillo(context, 350, 242, 146);
+
+  disegnaCuore(context, 703, 112, 48, "#f01c3c");
+
+  context.textAlign = "left";
+  context.textBaseline = "alphabetic";
+  context.fillStyle = "#ffffff";
+  context.shadowColor = "rgba(0,0,0,0.22)";
+  context.shadowBlur = 8;
+  scriviTracciato(
+    context,
+    "SPOTTED",
+    546,
+    208,
+    "900 62px Arial, sans-serif",
+    -1.6
+  );
+  scriviTracciato(
+    context,
+    "BOLOGNA",
+    546,
+    270,
+    "900 62px Arial, sans-serif",
+    -1.6
+  );
+  context.shadowBlur = 0;
+  context.fillStyle = "rgba(255,255,255,0.92)";
+  scriviTracciato(
+    context,
+    "OFFICIAL",
+    550,
+    310,
+    "400 20px Arial, sans-serif",
+    7
+  );
+  context.restore();
+};
+
+let granaVerticale = null;
+
+const creaGrana = () => {
+  if (granaVerticale) {
+    return granaVerticale;
+  }
+
+  const tela = document.createElement("canvas");
+  tela.width = 180;
+  tela.height = 320;
+
+  const context = tela.getContext("2d");
+
+  if (context) {
+    const dati = context.createImageData(
+      tela.width,
+      tela.height
+    );
+
+    for (
+      let indice = 0;
+      indice < dati.data.length;
+      indice += 4
+    ) {
+      const valore =
+        120 + Math.floor(Math.random() * 136);
+
+      dati.data[indice] = valore;
+      dati.data[indice + 1] = valore;
+      dati.data[indice + 2] = valore;
+      dati.data[indice + 3] = 22;
+    }
+
+    context.putImageData(dati, 0, 0);
+  }
+
+  granaVerticale = tela;
+
+  return tela;
+};
+
+const disegnaSfondoModello = (
+  context,
+  width,
+  height,
+  modello
+) => {
+  const gradiente = modello.sfondo.diagonale
+    ? context.createLinearGradient(0, 0, width, height)
+    : context.createLinearGradient(0, 0, 0, height);
+
+  modello.sfondo.stop.forEach(([posizione, colore]) => {
+    gradiente.addColorStop(posizione, colore);
+  });
+
+  context.fillStyle = gradiente;
+  context.fillRect(0, 0, width, height);
+
+  (modello.bagliori || []).forEach((bagliore) => {
+    const raggio = bagliore.raggio * height;
+    const centroX = bagliore.x * width;
+    const centroY = bagliore.y * height;
+    const alone = context.createRadialGradient(
+      centroX,
+      centroY,
+      0,
+      centroX,
+      centroY,
+      raggio
+    );
+
+    alone.addColorStop(0, bagliore.colore);
+    alone.addColorStop(1, "rgba(0,0,0,0)");
+
+    context.fillStyle = alone;
+    context.fillRect(0, 0, width, height);
+  });
+
+  const vignetta = context.createRadialGradient(
+    width / 2,
+    height * 0.45,
+    height * 0.2,
+    width / 2,
+    height * 0.45,
+    height * 0.85
   );
 
-  context.font = "400 25px Arial, sans-serif";
-  const statoGruppoRighe = isGroupProposal
-    ? contaRigheTesto(
-        context,
-        statoGruppo,
-        maxTextWidth
-      )
-    : 0;
+  vignetta.addColorStop(0, "rgba(0,0,0,0)");
+  vignetta.addColorStop(1, "rgba(0,0,0,0.18)");
 
-  const textTop =
-    cardY + padding + 58 + fontSize;
-  const metaY =
-    textTop +
-    Math.max(0, lineCount - 1) * lineHeight +
-    54;
-  const ctaY =
-    metaY +
-    (isGroupProposal
-      ? 42 +
-        Math.max(0, statoGruppoRighe - 1) * 34 +
-        34
-      : 62);
-  const tagsY =
-    ctaY +
-    Math.max(0, invitoRighe - 1) * 38 +
-    76;
-  const cardHeight = Math.max(
-    420,
-    tagsY - cardY + 48
+  context.fillStyle = vignetta;
+  context.fillRect(0, 0, width, height);
+
+  context.save();
+  context.globalAlpha = 0.35;
+  context.globalCompositeOperation = "overlay";
+  context.drawImage(
+    creaGrana(),
+    0,
+    0,
+    width,
+    height
   );
-  const height = Math.max(
-    1600,
-    cardY + cardHeight + 220
+  context.restore();
+};
+
+const disegnaParolaAdattata = (
+  context,
+  testo,
+  larghezzaTarget,
+  x,
+  y,
+  allineamento
+) => {
+  context.font = "900 200px Arial, sans-serif";
+  const larghezza =
+    context.measureText(testo).width || 1;
+  const dimensione = Math.round(
+    (200 * larghezzaTarget) / larghezza
   );
+
+  context.font = `900 ${dimensione}px Arial, sans-serif`;
+  context.textAlign = allineamento;
+  context.fillText(testo, x, y);
+};
+
+const disegnaParoleGiganti = (
+  context,
+  width,
+  height
+) => {
+  context.save();
+  context.fillStyle = "rgba(0,0,0,0.11)";
+  context.textBaseline = "alphabetic";
+
+  disegnaParolaAdattata(
+    context,
+    "SPOTTED",
+    1040,
+    width / 2,
+    650,
+    "center"
+  );
+
+  disegnaParolaAdattata(
+    context,
+    "BOLOGNA",
+    1120,
+    -150,
+    812,
+    "left"
+  );
+
+  context.font = "700 86px Arial, sans-serif";
+  context.textAlign = "center";
+  context.letterSpacing = "16px";
+  context.fillText("OFFICIAL", width / 2 + 8, 1060);
+  context.letterSpacing = "0px";
+  context.restore();
+};
+
+const disegnaCard = (
+  context,
+  x,
+  y,
+  larghezza,
+  altezza
+) => {
+  const gradiente = context.createLinearGradient(
+    x,
+    y,
+    x + larghezza,
+    y + altezza
+  );
+
+  gradiente.addColorStop(0, "rgba(8,6,12,0.64)");
+  gradiente.addColorStop(
+    0.55,
+    "rgba(12,8,16,0.56)"
+  );
+  gradiente.addColorStop(1, "rgba(18,10,24,0.52)");
+
+  context.save();
+  context.beginPath();
+  context.roundRect(x, y, larghezza, altezza, 52);
+  context.fillStyle = gradiente;
+  context.fill();
+
+  context.strokeStyle = "rgba(255,255,255,0.55)";
+  context.lineWidth = 2;
+  context.stroke();
+  context.restore();
+};
+
+async function creaImmagineSpottedVerticale(post) {
+  const canvas = document.createElement("canvas");
+  const width = 1080;
+  const height = 1920;
 
   canvas.width = width;
   canvas.height = height;
 
-  context = canvas.getContext("2d");
+  const context = canvas.getContext("2d");
+
   if (!context) {
     throw new Error("Canvas non disponibile");
   }
@@ -450,211 +957,143 @@ export async function creaImmagineSpotted(
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
 
-  await disegnaSfondo(
+  const modello = scegliModelloVerticale();
+  const testo = String(post.text || "").trim();
+
+  disegnaSfondoModello(
     context,
     width,
     height,
-    tema,
-    hashTesto(`${post.id || ""}${testo}`)
+    modello
   );
+  disegnaParoleGiganti(context, width, height);
+  disegnaIntestazione(context);
 
-  context.textAlign = "center";
-  context.shadowColor = "rgba(0,0,0,0.45)";
-  context.shadowBlur = 10;
-  context.fillStyle = "#ef3340";
-  context.font = "700 56px Arial, sans-serif";
-  context.fillText("♥", width / 2, 88);
-  context.fillStyle = "#f8fafc";
-  context.font = "900 48px Arial, sans-serif";
-  context.fillText("SPOTTED", width / 2, 140);
-  context.fillText("BOLOGNA", width / 2, 188);
-  context.fillStyle = "rgba(241,245,249,0.72)";
-  context.font = "300 18px Arial, sans-serif";
-  context.letterSpacing = "5px";
-  context.fillText("OFFICIAL", width / 2, 222);
-  context.letterSpacing = "0px";
-  context.shadowBlur = 0;
+  const cardX = 114;
+  const cardWidth = 852;
+  const cardY = 690;
+  const padding = 52;
+  const textX = cardX + padding;
+  const maxTextWidth = cardWidth - padding * 2;
+  const textStartY = cardY + 132;
 
-  const cardBottom = cardY + cardHeight;
-  const cardGradient = context.createLinearGradient(
-    cardX,
-    cardY,
-    cardX + cardWidth,
-    cardBottom
-  );
+  let fontSize = 52;
+  let lineHeight = 70;
+  let righe = [];
+  const cardBottomMassimo = 1780;
+  const spazioRighe =
+    cardBottomMassimo - 170 - 92 - 84 - textStartY;
 
-  cardGradient.addColorStop(
-    0,
-    "rgba(7, 11, 20, 0.90)"
-  );
-  cardGradient.addColorStop(
-    0.55,
-    "rgba(10, 16, 28, 0.88)"
-  );
-  cardGradient.addColorStop(
+  for (
+    let dimensione = 52;
+    dimensione >= 34;
+    dimensione -= 2
+  ) {
+    const interlinea = Math.round(dimensione * 1.34);
+
+    context.font = `700 ${dimensione}px Arial, sans-serif`;
+    const spezzate = spezzaTestoInRighe(
+      context,
+      testo,
+      maxTextWidth
+    );
+    const righeDisponibili = Math.max(
+      1,
+      Math.floor(spazioRighe / interlinea) + 1
+    );
+
+    fontSize = dimensione;
+    lineHeight = interlinea;
+    righe = spezzate;
+
+    if (spezzate.length <= righeDisponibili) {
+      break;
+    }
+  }
+
+  const massimoRighe = Math.max(
     1,
-    "rgba(20, 12, 30, 0.91)"
+    Math.floor(spazioRighe / lineHeight) + 1
   );
 
-  context.fillStyle = cardGradient;
-  context.beginPath();
-  context.roundRect(
+  if (righe.length > massimoRighe) {
+    righe = righe.slice(0, massimoRighe);
+    righe[righe.length - 1] = troncaRiga(
+      context,
+      righe[righe.length - 1],
+      maxTextWidth
+    );
+  }
+
+  const ultimaRigaY =
+    textStartY +
+    Math.max(0, righe.length - 1) * lineHeight;
+  const dateY = Math.max(
+    cardY + 421,
+    ultimaRigaY + 84
+  );
+  const ctaY = dateY + 92;
+  const cardHeight = Math.max(
+    980,
+    Math.min(cardBottomMassimo, ctaY + 170) - cardY
+  );
+
+  disegnaCard(
+    context,
     cardX,
     cardY,
     cardWidth,
-    cardHeight,
-    38
-  );
-  context.fill();
-
-  const bordo = context.createLinearGradient(
-    cardX,
-    cardY,
-    cardX + cardWidth,
-    cardBottom
+    cardHeight
   );
 
-  bordo.addColorStop(0, "#22d3ee");
-  bordo.addColorStop(
-    0.48,
-    "rgba(255,255,255,0.75)"
-  );
-  bordo.addColorStop(1, "#a855f7");
-
-  context.strokeStyle = bordo;
-  context.lineWidth = 3;
-  context.shadowColor = "rgba(34,211,238,0.35)";
-  context.shadowBlur = 24;
-  context.stroke();
-  context.shadowBlur = 0;
-
-  context.strokeStyle = "rgba(255,255,255,0.10)";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.roundRect(
-    cardX + 5,
-    cardY + 5,
-    cardWidth - 10,
-    cardHeight - 10,
-    34
-  );
-  context.stroke();
-
-  const testoBadge = isGroupProposal
-    ? "📚  PROPOSTA GRUPPO"
-    : "🤝  NUOVO SPOTTED";
-
-  context.font = "700 21px Arial, sans-serif";
-  const larghezzaBadge =
-    context.measureText(testoBadge).width + 34;
-
-  context.fillStyle = "rgba(34,211,238,0.10)";
-  context.strokeStyle = "rgba(45,212,191,0.65)";
-  context.lineWidth = 1.5;
-  context.beginPath();
-  context.roundRect(
-    textX,
-    cardY + padding,
-    larghezzaBadge,
-    38,
-    19
-  );
-  context.fill();
-  context.stroke();
-
-  context.fillStyle = "#67e8f9";
   context.textAlign = "left";
-  context.fillText(
-    testoBadge,
-    textX + 17,
-    cardY + padding + 26
-  );
-
-  context.fillStyle = "#f8fafc";
+  context.textBaseline = "alphabetic";
   context.font = `700 ${fontSize}px Arial, sans-serif`;
-  disegnaTestoACapo(
-    context,
-    testo,
-    textX,
-    textTop,
-    maxTextWidth,
-    lineHeight
-  );
+  context.fillStyle = "#ffffff";
+  context.shadowColor = "rgba(0,0,0,0.35)";
+  context.shadowBlur = 8;
+
+  righe.forEach((riga, indice) => {
+    context.fillText(
+      riga,
+      textX,
+      textStartY + indice * lineHeight
+    );
+  });
+
+  context.shadowBlur = 0;
 
   const dataPost = post.createdAt
     ? new Date(post.createdAt)
     : null;
   const data =
-    dataPost &&
-    !Number.isNaN(dataPost.getTime())
+    dataPost && !Number.isNaN(dataPost.getTime())
       ? dataPost.toLocaleDateString("it-IT")
       : "";
 
-  context.fillStyle = "rgba(226,232,240,0.72)";
-  context.font = "400 33px Arial, sans-serif";
-  context.fillText(data, textX, metaY);
+  context.fillStyle = "rgba(255,255,255,0.55)";
+  context.font = "400 34px Arial, sans-serif";
+  context.fillText(data, textX, dateY);
 
-  if (isGroupProposal) {
-    context.fillStyle = "#dbeafe";
-    context.font = "400 25px Arial, sans-serif";
-    disegnaTestoACapo(
-      context,
-      statoGruppo,
-      textX,
-      metaY + 42,
-      maxTextWidth,
-      34
-    );
-  }
-
-  context.fillStyle = "#facc15";
-  context.font = "700 27px Arial, sans-serif";
-  disegnaTestoACapo(
-    context,
-    INVITO_ACCESSO,
+  context.fillStyle = "#f5d02b";
+  context.font = "700 35px Arial, sans-serif";
+  context.fillText(
+    "Commenti e like nel link in Bio",
     textX,
-    ctaY,
-    maxTextWidth,
-    38
+    ctaY
   );
-
-  context.strokeStyle = "rgba(255,255,255,0.10)";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(textX, tagsY - 28);
-  context.lineTo(
-    cardX + cardWidth - padding,
-    tagsY - 28
-  );
-  context.stroke();
-
-  const testoTag = `${tema.icona}  ${tema.tags.join(
-    " • "
-  )}`;
-
-  context.fillStyle = "#67e8f9";
-  let dimensioneTag = 24;
-  context.font = `700 ${dimensioneTag}px Arial, sans-serif`;
-
-  while (
-    context.measureText(testoTag).width >
-      maxTextWidth &&
-    dimensioneTag > 15
-  ) {
-    dimensioneTag -= 1;
-    context.font = `700 ${dimensioneTag}px Arial, sans-serif`;
-  }
-
-  context.fillText(testoTag, textX, tagsY);
 
   context.textAlign = "right";
-  context.fillStyle = "rgba(255,255,255,0.72)";
-  context.font = "400 22px Arial, sans-serif";
+  context.fillStyle = "rgba(255,255,255,0.88)";
+  context.font = "400 26px Arial, sans-serif";
+  context.shadowColor = "rgba(0,0,0,0.35)";
+  context.shadowBlur = 6;
   context.fillText(
     "@spotted.bologna.official",
-    width - 42,
-    height - 42
+    1038,
+    1880
   );
+  context.shadowBlur = 0;
 
   const blob = await new Promise((resolve, reject) => {
     canvas.toBlob((immagine) => {
@@ -670,7 +1109,14 @@ export async function creaImmagineSpotted(
     }, "image/png");
   });
 
-  return { blob, canvas, tema };
+  return {
+    blob,
+    canvas,
+    tema: {
+      chiave: modello.chiave,
+      etichetta: modello.etichetta
+    }
+  };
 }
 
 async function creaImmagineSpottedInstagram(
