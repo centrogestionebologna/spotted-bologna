@@ -4,6 +4,62 @@ import { scegliModelloVerticale } from "./modelliSpottedVerticale";
 const INVITO_ACCESSO =
   "Accedi per visualizzare commenti e like! Link in descrizione al profilo Instagram";
 
+const FONT_TESTO =
+  '"Poppins", "Segoe UI", Arial, sans-serif';
+
+let promessaFontSpotted = null;
+
+const basePubblico = () => {
+  if (typeof process === "undefined" || !process.env) {
+    return "";
+  }
+
+  return String(
+    process.env.PUBLIC_URL || ""
+  ).replace(/\/$/, "");
+};
+
+const caricaFontSpotted = () => {
+  if (promessaFontSpotted) {
+    return promessaFontSpotted;
+  }
+
+  if (
+    typeof document === "undefined" ||
+    !document.fonts ||
+    typeof FontFace === "undefined"
+  ) {
+    promessaFontSpotted = Promise.resolve();
+    return promessaFontSpotted;
+  }
+
+  const base = basePubblico();
+  const definizioni = [
+    ["400", "Poppins-Regular.ttf"],
+    ["600", "Poppins-SemiBold.ttf"],
+    ["700", "Poppins-Bold.ttf"]
+  ];
+
+  promessaFontSpotted = Promise.all(
+    definizioni.map(async ([peso, file]) => {
+      try {
+        const font = new FontFace(
+          "Poppins",
+          `url(${base}/fonts/${file})`,
+          { weight: peso }
+        );
+
+        await font.load();
+        document.fonts.add(font);
+      } catch (errore) {
+        // Se il font non si carica si continua con Arial.
+      }
+    })
+  );
+
+  return promessaFontSpotted;
+};
+
 const cacheSfondi = new Map();
 
 const disegnaTestoACapo = (
@@ -401,20 +457,39 @@ const scriviTracciato = (
   x,
   y,
   font,
-  traccia
+  traccia,
+  scalaX = 1
 ) => {
   const fontPrecedente = context.font;
-  let cursore = x;
+  const caratteri = Array.from(testo);
+  let larghezza = 0;
 
   context.font = font;
+  caratteri.forEach((carattere, indice) => {
+    larghezza += context.measureText(carattere).width;
 
-  Array.from(testo).forEach((carattere) => {
-    context.fillText(carattere, cursore, y);
+    if (indice < caratteri.length - 1) {
+      larghezza += traccia;
+    }
+  });
+
+  context.save();
+  context.translate(x, y);
+  context.scale(scalaX, 1);
+  context.font = font;
+
+  let cursore = 0;
+
+  caratteri.forEach((carattere) => {
+    context.fillText(carattere, cursore, 0);
     cursore +=
       context.measureText(carattere).width + traccia;
   });
 
+  context.restore();
   context.font = fontPrecedente;
+
+  return larghezza * scalaX;
 };
 
 const disegnaTestoSuArco = (
@@ -489,132 +564,237 @@ const disegnaTorri = (
     Math.PI * 2
   );
   context.clip();
-  context.strokeStyle = "rgba(255,255,255,0.92)";
-  context.lineWidth = 1.7;
+  context.strokeStyle = "rgba(255,255,255,0.94)";
+  context.fillStyle = "rgba(255,255,255,0.94)";
+  context.lineWidth = 1.8;
   context.lineCap = "round";
   context.lineJoin = "round";
 
-  context.beginPath();
-  context.moveTo(centroX - 94, terra);
-  context.lineTo(centroX + 94, terra);
-  context.stroke();
+  const linea = (x1, y1, x2, y2) => {
+    context.beginPath();
+    context.moveTo(x1, y1);
+    context.lineTo(x2, y2);
+    context.stroke();
+  };
 
-  const torreX = centroX + 8;
-  const torreY = terra - 116;
-  const torreLarghezza = 30;
-  const torreAltezza = 116;
-
-  context.strokeRect(
-    torreX,
-    torreY,
-    torreLarghezza,
-    torreAltezza
-  );
-
-  context.beginPath();
-
-  for (let indice = 0; indice < 4; indice += 1) {
-    context.rect(
-      torreX - 2 + indice * 9,
-      torreY - 7,
-      5,
-      7
-    );
-  }
-
-  context.stroke();
-
-  for (let riga = 0; riga < 6; riga += 1) {
-    for (let colonna = 0; colonna < 3; colonna += 1) {
-      context.strokeRect(
-        torreX + 5 + colonna * 8,
-        torreY + 12 + riga * 16,
-        4,
-        7
-      );
+  const finestre = (
+    x,
+    y,
+    colonne,
+    righe,
+    passoX,
+    passoY,
+    larghezza = 3,
+    altezza = 5
+  ) => {
+    for (let riga = 0; riga < righe; riga += 1) {
+      for (let colonna = 0; colonna < colonne; colonna += 1) {
+        context.strokeRect(
+          x + colonna * passoX,
+          y + riga * passoY,
+          larghezza,
+          altezza
+        );
+      }
     }
-  }
+  };
 
-  context.beginPath();
-  context.moveTo(torreX + 11, terra);
-  context.lineTo(torreX + 11, terra - 10);
-  context.arc(
-    torreX + 15,
-    terra - 10,
-    4,
-    Math.PI,
-    0
-  );
-  context.lineTo(torreX + 19, terra);
-  context.stroke();
+  linea(centroX - 98, terra, centroX + 98, terra);
 
-  context.save();
-  context.translate(centroX - 42, terra);
-  context.rotate(-0.13);
-
-  const larghezzaGarisenda = 24;
-  const altezzaGarisenda = 86;
+  // Torre degli Asinelli, alta e con la guglia.
+  const asinelliX = centroX + 2;
+  const asinelliTop = centroY - 86;
+  const asinelliLarghezza = 30;
 
   context.strokeRect(
-    -larghezzaGarisenda / 2,
-    -altezzaGarisenda,
-    larghezzaGarisenda,
-    altezzaGarisenda
+    asinelliX,
+    asinelliTop,
+    asinelliLarghezza,
+    terra - asinelliTop
   );
 
   context.beginPath();
+  context.moveTo(centroX + 18, asinelliTop - 20);
+  context.lineTo(asinelliX - 4, asinelliTop);
+  context.lineTo(
+    asinelliX + asinelliLarghezza + 4,
+    asinelliTop
+  );
+  context.closePath();
+  context.stroke();
+
+  context.beginPath();
+  context.arc(
+    centroX + 18,
+    asinelliTop - 22,
+    1.6,
+    0,
+    Math.PI * 2
+  );
+  context.fill();
+
+  finestre(
+    asinelliX + 5,
+    asinelliTop + 18,
+    4,
+    8,
+    6.5,
+    11
+  );
+
+  context.beginPath();
+  context.moveTo(asinelliX + 11, terra);
+  context.lineTo(asinelliX + 11, terra - 12);
+  context.arc(asinelliX + 15, terra - 12, 4, Math.PI, 0);
+  context.lineTo(asinelliX + 19, terra);
+  context.stroke();
+
+  // Torre della Garisenda, pendente.
+  context.save();
+  context.translate(centroX - 40, terra);
+  context.rotate(-0.14);
+
+  const garisendaLarghezza = 22;
+  const garisendaAltezza = 128;
+
+  context.strokeRect(
+    -garisendaLarghezza / 2,
+    -garisendaAltezza,
+    garisendaLarghezza,
+    garisendaAltezza
+  );
 
   for (let indice = 0; indice < 3; indice += 1) {
-    context.rect(
-      -larghezzaGarisenda / 2 -
-        2 +
-        indice * 9,
-      -altezzaGarisenda - 6,
+    context.strokeRect(
+      -garisendaLarghezza / 2 - 2 + indice * 8,
+      -garisendaAltezza - 5,
       5,
-      6
+      5
     );
   }
 
-  context.stroke();
-
-  for (let riga = 0; riga < 4; riga += 1) {
-    for (let colonna = 0; colonna < 2; colonna += 1) {
-      context.strokeRect(
-        -larghezzaGarisenda / 2 +
-          5 +
-          colonna * 9,
-        -altezzaGarisenda + 12 + riga * 16,
-        4,
-        7
-      );
-    }
-  }
+  finestre(
+    -garisendaLarghezza / 2 + 4,
+    -garisendaAltezza + 16,
+    2,
+    7,
+    8,
+    12
+  );
 
   context.restore();
 
+  // Palazzo con cupola a sinistra.
+  const sinistraX = centroX - 94;
+  const sinistraY = terra - 46;
+  const sinistraLarghezza = 42;
+
   context.strokeRect(
-    centroX - 92,
-    terra - 34,
-    38,
-    34
+    sinistraX,
+    sinistraY,
+    sinistraLarghezza,
+    46
+  );
+  linea(
+    sinistraX - 3,
+    sinistraY,
+    sinistraX + sinistraLarghezza + 3,
+    sinistraY
   );
 
+  context.beginPath();
+  context.arc(
+    sinistraX + 21,
+    sinistraY,
+    12,
+    Math.PI,
+    0
+  );
+  context.stroke();
+  linea(
+    sinistraX + 21,
+    sinistraY - 12,
+    sinistraX + 21,
+    sinistraY - 21
+  );
+  linea(
+    sinistraX + 18,
+    sinistraY - 18,
+    sinistraX + 24,
+    sinistraY - 18
+  );
+
+  finestre(
+    sinistraX + 6,
+    sinistraY + 12,
+    3,
+    2,
+    12,
+    13,
+    4,
+    6
+  );
+
+  context.beginPath();
+  context.moveTo(sinistraX + 17, terra);
+  context.lineTo(sinistraX + 17, terra - 10);
+  context.arc(sinistraX + 21, terra - 10, 4, Math.PI, 0);
+  context.lineTo(sinistraX + 25, terra);
+  context.stroke();
+
+  // Palazzo con portico a destra.
+  const destraX = centroX + 38;
+  const destraY = terra - 38;
+  const destraLarghezza = 50;
+
+  context.strokeRect(
+    destraX,
+    destraY,
+    destraLarghezza,
+    38
+  );
+  context.beginPath();
+  context.moveTo(destraX - 3, destraY);
+  context.lineTo(destraX + 25, destraY - 14);
+  context.lineTo(destraX + 53, destraY);
+  context.stroke();
+
   for (let indice = 0; indice < 3; indice += 1) {
-    const centroArco = centroX - 83 + indice * 10;
+    const centroArco = destraX + 10 + indice * 15;
 
     context.beginPath();
-    context.moveTo(centroArco - 4, terra);
-    context.lineTo(centroArco - 4, terra - 12);
+    context.moveTo(centroArco - 5, terra);
+    context.lineTo(centroArco - 5, terra - 13);
     context.arc(
       centroArco,
-      terra - 12,
-      4,
+      terra - 13,
+      5,
       Math.PI,
       0
     );
-    context.lineTo(centroArco + 4, terra);
+    context.lineTo(centroArco + 5, terra);
     context.stroke();
   }
+
+  // Piccole figure sotto i portici.
+  const figura = (x, altezza) => {
+    context.beginPath();
+    context.arc(
+      x,
+      terra - altezza,
+      1.9,
+      0,
+      Math.PI * 2
+    );
+    context.stroke();
+    linea(x, terra - altezza + 2, x, terra - 4);
+    linea(x, terra - 4, x - 2, terra);
+    linea(x, terra - 4, x + 2, terra);
+  };
+
+  figura(centroX - 12, 10);
+  figura(centroX + 46, 9);
+  figura(centroX - 68, 8);
 
   context.restore();
 };
@@ -626,8 +806,13 @@ const disegnaSigillo = (
   raggio
 ) => {
   context.save();
-  context.strokeStyle = "rgba(255,255,255,0.95)";
-  context.lineWidth = 3;
+
+  // Alone morbido attorno al sigillo.
+  context.save();
+  context.shadowColor = "rgba(255,255,255,0.35)";
+  context.shadowBlur = 12;
+  context.strokeStyle = "rgba(255,255,255,0.96)";
+  context.lineWidth = 2.2;
   context.beginPath();
   context.arc(
     centroX,
@@ -637,23 +822,26 @@ const disegnaSigillo = (
     Math.PI * 2
   );
   context.stroke();
+  context.restore();
 
+  context.strokeStyle = "rgba(255,255,255,0.95)";
   context.lineWidth = 1.2;
   context.beginPath();
   context.arc(
     centroX,
     centroY,
-    raggio - 7,
+    raggio - 6,
     0,
     Math.PI * 2
   );
   context.stroke();
 
+  context.lineWidth = 1.6;
   context.beginPath();
   context.arc(
     centroX,
     centroY,
-    raggio - 40,
+    raggio - 38,
     0,
     Math.PI * 2
   );
@@ -664,12 +852,12 @@ const disegnaSigillo = (
     "SPOTTED BOLOGNA OFFICIAL",
     centroX,
     centroY,
-    raggio - 20,
+    raggio - 19,
     -Math.PI / 2,
     1,
-    "700 15px Arial, sans-serif",
-    "rgba(255,255,255,0.96)",
-    2.2
+    `600 16px ${FONT_TESTO}`,
+    "rgba(255,255,255,0.97)",
+    2.4
   );
 
   disegnaTestoSuArco(
@@ -677,31 +865,54 @@ const disegnaSigillo = (
     "UNIVERSITÀ DI BOLOGNA",
     centroX,
     centroY,
-    raggio - 20,
+    raggio - 19,
     Math.PI / 2,
     -1,
-    "700 10.5px Arial, sans-serif",
-    "rgba(255,255,255,0.92)",
-    2
+    `600 12px ${FONT_TESTO}`,
+    "rgba(255,255,255,0.95)",
+    3
   );
 
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillStyle = "rgba(255,255,255,0.95)";
-  context.font = "700 15px Arial, sans-serif";
-  context.letterSpacing = "2px";
+  context.fillStyle = "rgba(255,255,255,0.96)";
+  context.font = `600 17px ${FONT_TESTO}`;
+  context.letterSpacing = "1.5px";
   context.fillText(
     "A.D. 2026",
     centroX,
-    centroY + 84
+    centroY + 86
   );
   context.letterSpacing = "0px";
+
+  const interno = context.createRadialGradient(
+    centroX,
+    centroY,
+    0,
+    centroX,
+    centroY,
+    raggio - 38
+  );
+
+  interno.addColorStop(0, "rgba(255,255,255,0.10)");
+  interno.addColorStop(1, "rgba(255,255,255,0)");
+
+  context.fillStyle = interno;
+  context.beginPath();
+  context.arc(
+    centroX,
+    centroY,
+    raggio - 38,
+    0,
+    Math.PI * 2
+  );
+  context.fill();
 
   disegnaTorri(
     context,
     centroX,
     centroY,
-    raggio - 40
+    raggio - 38
   );
   context.restore();
 };
@@ -710,38 +921,40 @@ const disegnaIntestazione = (context) => {
   context.save();
   disegnaSigillo(context, 350, 242, 146);
 
-  disegnaCuore(context, 703, 112, 48, "#f01c3c");
+  disegnaCuore(context, 694, 105, 50, "#f01c3c");
 
   context.textAlign = "left";
   context.textBaseline = "alphabetic";
   context.fillStyle = "#ffffff";
-  context.shadowColor = "rgba(0,0,0,0.22)";
-  context.shadowBlur = 8;
+  context.shadowColor = "rgba(0,0,0,0.30)";
+  context.shadowBlur = 12;
   scriviTracciato(
     context,
     "SPOTTED",
     546,
-    208,
-    "900 62px Arial, sans-serif",
-    -1.6
+    252,
+    "800 86px Arial, sans-serif",
+    -3,
+    0.67
   );
   scriviTracciato(
     context,
     "BOLOGNA",
     546,
-    270,
-    "900 62px Arial, sans-serif",
-    -1.6
+    332,
+    "800 86px Arial, sans-serif",
+    -3,
+    0.67
   );
   context.shadowBlur = 0;
   context.fillStyle = "rgba(255,255,255,0.92)";
   scriviTracciato(
     context,
     "OFFICIAL",
-    550,
-    310,
-    "400 20px Arial, sans-serif",
-    7
+    574,
+    376,
+    `400 27px ${FONT_TESTO}`,
+    18
   );
   context.restore();
 };
@@ -804,6 +1017,12 @@ const disegnaSfondoModello = (
   context.fillStyle = gradiente;
   context.fillRect(0, 0, width, height);
 
+  context.save();
+
+  if (modello.mescola) {
+    context.globalCompositeOperation = modello.mescola;
+  }
+
   (modello.bagliori || []).forEach((bagliore) => {
     const raggio = bagliore.raggio * height;
     const centroX = bagliore.x * width;
@@ -824,6 +1043,8 @@ const disegnaSfondoModello = (
     context.fillRect(0, 0, width, height);
   });
 
+  context.restore();
+
   const vignetta = context.createRadialGradient(
     width / 2,
     height * 0.45,
@@ -834,7 +1055,7 @@ const disegnaSfondoModello = (
   );
 
   vignetta.addColorStop(0, "rgba(0,0,0,0)");
-  vignetta.addColorStop(1, "rgba(0,0,0,0.18)");
+  vignetta.addColorStop(1, "rgba(0,0,0,0.10)");
 
   context.fillStyle = vignetta;
   context.fillRect(0, 0, width, height);
@@ -858,18 +1079,23 @@ const disegnaParolaAdattata = (
   larghezzaTarget,
   x,
   y,
-  allineamento
+  allineamento,
+  scalaX
 ) => {
   context.font = "900 200px Arial, sans-serif";
   const larghezza =
     context.measureText(testo).width || 1;
   const dimensione = Math.round(
-    (200 * larghezzaTarget) / larghezza
+    (200 * (larghezzaTarget / scalaX)) / larghezza
   );
 
+  context.save();
+  context.translate(x, y);
+  context.scale(scalaX, 1);
   context.font = `900 ${dimensione}px Arial, sans-serif`;
   context.textAlign = allineamento;
-  context.fillText(testo, x, y);
+  context.fillText(testo, 0, 0);
+  context.restore();
 };
 
 const disegnaParoleGiganti = (
@@ -878,32 +1104,40 @@ const disegnaParoleGiganti = (
   height
 ) => {
   context.save();
-  context.fillStyle = "rgba(0,0,0,0.11)";
+  context.fillStyle = "rgba(0,0,0,0.18)";
   context.textBaseline = "alphabetic";
 
   disegnaParolaAdattata(
     context,
     "SPOTTED",
-    1040,
+    1080,
     width / 2,
-    650,
-    "center"
+    590,
+    "center",
+    0.88
   );
 
   disegnaParolaAdattata(
     context,
     "BOLOGNA",
-    1120,
-    -150,
-    812,
-    "left"
+    1180,
+    -120,
+    745,
+    "left",
+    0.88
   );
 
-  context.font = "700 86px Arial, sans-serif";
-  context.textAlign = "center";
-  context.letterSpacing = "16px";
-  context.fillText("OFFICIAL", width / 2 + 8, 1060);
-  context.letterSpacing = "0px";
+  context.textAlign = "left";
+  scriviTracciato(
+    context,
+    "OFFICIAL",
+    350,
+    1038,
+    "700 72px Arial, sans-serif",
+    14,
+    0.9
+  );
+
   context.restore();
 };
 
@@ -921,12 +1155,12 @@ const disegnaCard = (
     y + altezza
   );
 
-  gradiente.addColorStop(0, "rgba(8,6,12,0.64)");
+  gradiente.addColorStop(0, "rgba(8,6,12,0.70)");
   gradiente.addColorStop(
     0.55,
-    "rgba(12,8,16,0.56)"
+    "rgba(12,8,16,0.62)"
   );
-  gradiente.addColorStop(1, "rgba(18,10,24,0.52)");
+  gradiente.addColorStop(1, "rgba(18,10,24,0.58)");
 
   context.save();
   context.beginPath();
@@ -941,6 +1175,8 @@ const disegnaCard = (
 };
 
 async function creaImmagineSpottedVerticale(post) {
+  await caricaFontSpotted();
+
   const canvas = document.createElement("canvas");
   const width = 1080;
   const height = 1920;
@@ -966,32 +1202,31 @@ async function creaImmagineSpottedVerticale(post) {
     height,
     modello
   );
-  disegnaParoleGiganti(context, width, height);
   disegnaIntestazione(context);
 
   const cardX = 114;
-  const cardWidth = 852;
+  const cardWidth = 856;
   const cardY = 690;
   const padding = 52;
   const textX = cardX + padding;
   const maxTextWidth = cardWidth - padding * 2;
-  const textStartY = cardY + 132;
+  const textStartY = cardY + 120;
 
-  let fontSize = 52;
-  let lineHeight = 70;
+  let fontSize = 48;
+  let lineHeight = 72;
   let righe = [];
   const cardBottomMassimo = 1780;
   const spazioRighe =
     cardBottomMassimo - 170 - 92 - 84 - textStartY;
 
   for (
-    let dimensione = 52;
-    dimensione >= 34;
+    let dimensione = 48;
+    dimensione >= 32;
     dimensione -= 2
   ) {
-    const interlinea = Math.round(dimensione * 1.34);
+    const interlinea = Math.round(dimensione * 1.5);
 
-    context.font = `700 ${dimensione}px Arial, sans-serif`;
+    context.font = `700 ${dimensione}px ${FONT_TESTO}`;
     const spezzate = spezzaTestoInRighe(
       context,
       testo,
@@ -1029,15 +1264,16 @@ async function creaImmagineSpottedVerticale(post) {
     textStartY +
     Math.max(0, righe.length - 1) * lineHeight;
   const dateY = Math.max(
-    cardY + 421,
+    cardY + 412,
     ultimaRigaY + 84
   );
   const ctaY = dateY + 92;
   const cardHeight = Math.max(
-    980,
+    972,
     Math.min(cardBottomMassimo, ctaY + 170) - cardY
   );
 
+  disegnaParoleGiganti(context, width, height);
   disegnaCard(
     context,
     cardX,
@@ -1048,7 +1284,7 @@ async function creaImmagineSpottedVerticale(post) {
 
   context.textAlign = "left";
   context.textBaseline = "alphabetic";
-  context.font = `700 ${fontSize}px Arial, sans-serif`;
+  context.font = `700 ${fontSize}px ${FONT_TESTO}`;
   context.fillStyle = "#ffffff";
   context.shadowColor = "rgba(0,0,0,0.35)";
   context.shadowBlur = 8;
@@ -1072,11 +1308,11 @@ async function creaImmagineSpottedVerticale(post) {
       : "";
 
   context.fillStyle = "rgba(255,255,255,0.55)";
-  context.font = "400 34px Arial, sans-serif";
+  context.font = `400 33px ${FONT_TESTO}`;
   context.fillText(data, textX, dateY);
 
   context.fillStyle = "#f5d02b";
-  context.font = "700 35px Arial, sans-serif";
+  context.font = `600 34px ${FONT_TESTO}`;
   context.fillText(
     "Commenti e like nel link in Bio",
     textX,
@@ -1085,12 +1321,12 @@ async function creaImmagineSpottedVerticale(post) {
 
   context.textAlign = "right";
   context.fillStyle = "rgba(255,255,255,0.88)";
-  context.font = "400 26px Arial, sans-serif";
+  context.font = `400 25px ${FONT_TESTO}`;
   context.shadowColor = "rgba(0,0,0,0.35)";
   context.shadowBlur = 6;
   context.fillText(
     "@spotted.bologna.official",
-    1038,
+    1022,
     1880
   );
   context.shadowBlur = 0;

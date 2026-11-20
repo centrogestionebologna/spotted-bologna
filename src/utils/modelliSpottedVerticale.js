@@ -91,26 +91,32 @@ export const MODELLI_VERTICALE = [
     chiave: "verde",
     etichetta: "Verde acqua",
     sfondo: {
-      stop: [
-        [0, "#2ec3b0"],
-        [0.32, "#16a49b"],
-        [0.6, "#0f7a86"],
-        [0.82, "#0a4f60"],
-        [1, "#072c3a"]
+            stop: [
+        [0, "#0a3b4d"],
+        [0.22, "#0d5b68"],
+        [0.48, "#128e8c"],
+        [0.7, "#16a89c"],
+        [1, "#0a3a4a"]
       ]
     },
     bagliori: [
       {
         x: 0.5,
-        y: 0.82,
-        raggio: 0.4,
-        colore: "rgba(50,255,220,0.22)"
+        y: 0.78,
+        raggio: 0.6,
+        colore: "rgba(80,255,230,0.55)"
       },
       {
         x: 0.5,
-        y: 0.05,
-        raggio: 0.4,
-        colore: "rgba(255,255,255,0.08)"
+        y: 0.55,
+        raggio: 0.35,
+        colore: "rgba(40,230,210,0.28)"
+      },
+      {
+        x: 0.5,
+        y: 0.02,
+        raggio: 0.45,
+        colore: "rgba(255,255,255,0.07)"
       }
     ]
   },
@@ -120,12 +126,12 @@ export const MODELLI_VERTICALE = [
     diagonale: true,
     sfondo: {
       stop: [
-        [0, "#f7941d"],
-        [0.25, "#f2c31c"],
-        [0.45, "#8cc63f"],
-        [0.65, "#2bb3e0"],
-        [0.85, "#2f6fe0"],
-        [1, "#5b2bd0"]
+        [0, "#ff9a1f"],
+        [0.18, "#ffc21f"],
+        [0.38, "#86cc2f"],
+        [0.55, "#38c4e8"],
+        [0.75, "#2f6fe0"],
+        [1, "#6a2bd0"]
       ]
     },
     bagliori: [
@@ -133,37 +139,37 @@ export const MODELLI_VERTICALE = [
         x: 0.08,
         y: 0.04,
         raggio: 0.55,
-        colore: "rgba(250,140,20,0.55)"
+        colore: "rgba(255,140,20,0.65)"
       },
       {
-        x: 0.9,
+        x: 0.82,
         y: 0.06,
         raggio: 0.45,
-        colore: "rgba(220,235,40,0.45)"
+        colore: "rgba(255,235,40,0.6)"
       },
       {
-        x: 0.06,
-        y: 0.45,
-        raggio: 0.45,
-        colore: "rgba(40,190,70,0.40)"
+        x: 0.08,
+        y: 0.5,
+        raggio: 0.5,
+        colore: "rgba(60,220,80,0.6)"
       },
       {
         x: 0.12,
         y: 0.92,
         raggio: 0.5,
-        colore: "rgba(110,40,210,0.55)"
+        colore: "rgba(130,40,220,0.65)"
       },
       {
         x: 0.92,
         y: 0.9,
         raggio: 0.55,
-        colore: "rgba(20,100,245,0.55)"
+        colore: "rgba(30,110,255,0.65)"
       },
       {
         x: 0.55,
         y: 0.5,
         raggio: 0.35,
-        colore: "rgba(40,180,230,0.30)"
+        colore: "rgba(40,200,240,0.35)"
       }
     ]
   }
