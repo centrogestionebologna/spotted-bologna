@@ -1024,54 +1024,146 @@ async function creaImmagineSpottedVerticale(post) {
   const padding = 52;
   const textX = cardX + padding;
   const maxTextWidth = cardWidth - padding * 2;
-  const textStartY = cardY + 120;
+  const cardBottomMassimo = 1600;
+
+  const domanda = String(post.questionText || "").trim();
+  const isQuestionAnswer =
+    post.type === "questionAnswer" || Boolean(domanda);
 
   let fontSize = 48;
   let lineHeight = 72;
   let righe = [];
-  const cardBottomMassimo = 1600;
-  const spazioRighe =
-    cardBottomMassimo - 120 - 90 - 110 - textStartY;
+  let textStartY = cardY + 120;
+  let bloccoDomanda = null;
 
-  for (
-    let dimensione = 48;
-    dimensione >= 32;
-    dimensione -= 2
-  ) {
-    const interlinea = Math.round(dimensione * 1.5);
+  if (isQuestionAnswer) {
+    const domandaEtichettaY = cardY + 96;
 
-    context.font = `700 ${dimensione}px ${FONT_TESTO}`;
-    const spezzate = spezzaTestoInRighe(
+    context.font = `600 34px ${FONT_TESTO}`;
+    let righeDomanda = spezzaTestoInRighe(
       context,
-      testo,
+      domanda || "Domanda della community",
       maxTextWidth
     );
-    const righeDisponibili = Math.max(
-      1,
-      Math.floor(spazioRighe / interlinea) + 1
-    );
 
-    fontSize = dimensione;
-    lineHeight = interlinea;
-    righe = spezzate;
-
-    if (spezzate.length <= righeDisponibili) {
-      break;
+    if (righeDomanda.length > 3) {
+      righeDomanda = righeDomanda.slice(0, 3);
+      righeDomanda[2] = troncaRiga(
+        context,
+        righeDomanda[2],
+        maxTextWidth
+      );
     }
-  }
 
-  const massimoRighe = Math.max(
-    1,
-    Math.floor(spazioRighe / lineHeight) + 1
-  );
+    const domandaInterlinea = 46;
+    const domandaInizioY = domandaEtichettaY + 46;
+    const domandaFineY =
+      domandaInizioY +
+      Math.max(0, righeDomanda.length - 1) *
+        domandaInterlinea;
 
-  if (righe.length > massimoRighe) {
-    righe = righe.slice(0, massimoRighe);
-    righe[righe.length - 1] = troncaRiga(
-      context,
-      righe[righe.length - 1],
-      maxTextWidth
+    const rispostaEtichettaY = domandaFineY + 60;
+    textStartY = rispostaEtichettaY + 50;
+
+    const spazioRisposta =
+      cardBottomMassimo - 320 - textStartY;
+
+    for (
+      let dimensione = 44;
+      dimensione >= 30;
+      dimensione -= 2
+    ) {
+      const interlinea = Math.round(
+        dimensione * 1.5
+      );
+
+      context.font = `700 ${dimensione}px ${FONT_TESTO}`;
+      const spezzate = spezzaTestoInRighe(
+        context,
+        testo,
+        maxTextWidth
+      );
+      const righeDisponibili = Math.max(
+        1,
+        Math.floor(spazioRisposta / interlinea) + 1
+      );
+
+      fontSize = dimensione;
+      lineHeight = interlinea;
+      righe = spezzate;
+
+      if (spezzate.length <= righeDisponibili) {
+        break;
+      }
+    }
+
+    const massimoRighe = Math.max(
+      1,
+      Math.floor(spazioRisposta / lineHeight) + 1
     );
+
+    if (righe.length > massimoRighe) {
+      righe = righe.slice(0, massimoRighe);
+      righe[righe.length - 1] = troncaRiga(
+        context,
+        righe[righe.length - 1],
+        maxTextWidth
+      );
+    }
+
+    bloccoDomanda = {
+      etichettaY: domandaEtichettaY,
+      righe: righeDomanda,
+      inizioY: domandaInizioY,
+      interlinea: domandaInterlinea,
+      rispostaEtichettaY
+    };
+  } else {
+    const spazioRighe =
+      cardBottomMassimo - 120 - 90 - 110 - textStartY;
+
+    for (
+      let dimensione = 48;
+      dimensione >= 32;
+      dimensione -= 2
+    ) {
+      const interlinea = Math.round(
+        dimensione * 1.5
+      );
+
+      context.font = `700 ${dimensione}px ${FONT_TESTO}`;
+      const spezzate = spezzaTestoInRighe(
+        context,
+        testo,
+        maxTextWidth
+      );
+      const righeDisponibili = Math.max(
+        1,
+        Math.floor(spazioRighe / interlinea) + 1
+      );
+
+      fontSize = dimensione;
+      lineHeight = interlinea;
+      righe = spezzate;
+
+      if (spezzate.length <= righeDisponibili) {
+        break;
+      }
+    }
+
+    const massimoRighe = Math.max(
+      1,
+      Math.floor(spazioRighe / lineHeight) + 1
+    );
+
+    if (righe.length > massimoRighe) {
+      righe = righe.slice(0, massimoRighe);
+      righe[righe.length - 1] = troncaRiga(
+        context,
+        righe[righe.length - 1],
+        maxTextWidth
+      );
+    }
   }
 
   const ultimaRigaY =
@@ -1097,6 +1189,41 @@ async function creaImmagineSpottedVerticale(post) {
 
   context.textAlign = "left";
   context.textBaseline = "alphabetic";
+
+  if (bloccoDomanda) {
+    context.fillStyle = "rgba(245,208,43,0.95)";
+    context.font = `700 24px ${FONT_TESTO}`;
+    context.fillText(
+      "DOMANDA",
+      textX,
+      bloccoDomanda.etichettaY
+    );
+
+    context.fillStyle = "rgba(255,255,255,0.88)";
+    context.font = `600 34px ${FONT_TESTO}`;
+    context.shadowColor = "rgba(0,0,0,0.35)";
+    context.shadowBlur = 8;
+
+    bloccoDomanda.righe.forEach((riga, indice) => {
+      context.fillText(
+        riga,
+        textX,
+        bloccoDomanda.inizioY +
+          indice * bloccoDomanda.interlinea
+      );
+    });
+
+    context.shadowBlur = 0;
+
+    context.fillStyle = "rgba(245,208,43,0.95)";
+    context.font = `700 24px ${FONT_TESTO}`;
+    context.fillText(
+      "RISPOSTA",
+      textX,
+      bloccoDomanda.rispostaEtichettaY
+    );
+  }
+
   context.font = `700 ${fontSize}px ${FONT_TESTO}`;
   context.fillStyle = "#ffffff";
   context.shadowColor = "rgba(0,0,0,0.35)";
@@ -1312,54 +1439,146 @@ async function creaImmagineSpottedInstagram(post) {
   const padding = 48;
   const textX = cardX + padding;
   const maxTextWidth = cardWidth - padding * 2;
-  const textStartY = cardY + 80;
-  const cardBottomMassimo = 940;
-  const spazioRighe =
-    cardBottomMassimo - 90 - 62 - 100 - textStartY;
+  const cardBottomMassimo = 1010;
+
+  const domanda = String(post.questionText || "").trim();
+  const isQuestionAnswer =
+    post.type === "questionAnswer" || Boolean(domanda);
 
   let fontSize = 44;
   let lineHeight = 60;
   let righe = [];
+  let textStartY = cardY + 80;
+  let bloccoDomanda = null;
 
-  for (
-    let dimensione = 44;
-    dimensione >= 28;
-    dimensione -= 2
-  ) {
-    const interlinea = Math.round(dimensione * 1.36);
+  if (isQuestionAnswer) {
+    const domandaEtichettaY = cardY + 74;
 
-    context.font = `700 ${dimensione}px ${FONT_TESTO}`;
-    const spezzate = spezzaTestoInRighe(
+    context.font = `600 26px ${FONT_TESTO}`;
+    let righeDomanda = spezzaTestoInRighe(
       context,
-      testo,
+      domanda || "Domanda della community",
       maxTextWidth
     );
-    const righeDisponibili = Math.max(
-      1,
-      Math.floor(spazioRighe / interlinea) + 1
-    );
 
-    fontSize = dimensione;
-    lineHeight = interlinea;
-    righe = spezzate;
-
-    if (spezzate.length <= righeDisponibili) {
-      break;
+    if (righeDomanda.length > 2) {
+      righeDomanda = righeDomanda.slice(0, 2);
+      righeDomanda[1] = troncaRiga(
+        context,
+        righeDomanda[1],
+        maxTextWidth
+      );
     }
-  }
 
-  const massimoRighe = Math.max(
-    1,
-    Math.floor(spazioRighe / lineHeight) + 1
-  );
+    const domandaInterlinea = 34;
+    const domandaInizioY = domandaEtichettaY + 38;
+    const domandaFineY =
+      domandaInizioY +
+      Math.max(0, righeDomanda.length - 1) *
+        domandaInterlinea;
 
-  if (righe.length > massimoRighe) {
-    righe = righe.slice(0, massimoRighe);
-    righe[righe.length - 1] = troncaRiga(
-      context,
-      righe[righe.length - 1],
-      maxTextWidth
+    const rispostaEtichettaY = domandaFineY + 56;
+    textStartY = rispostaEtichettaY + 42;
+
+    const spazioRisposta =
+      cardBottomMassimo - 252 - textStartY;
+
+    for (
+      let dimensione = 38;
+      dimensione >= 26;
+      dimensione -= 2
+    ) {
+      const interlinea = Math.round(
+        dimensione * 1.36
+      );
+
+      context.font = `700 ${dimensione}px ${FONT_TESTO}`;
+      const spezzate = spezzaTestoInRighe(
+        context,
+        testo,
+        maxTextWidth
+      );
+      const righeDisponibili = Math.max(
+        1,
+        Math.floor(spazioRisposta / interlinea) + 1
+      );
+
+      fontSize = dimensione;
+      lineHeight = interlinea;
+      righe = spezzate;
+
+      if (spezzate.length <= righeDisponibili) {
+        break;
+      }
+    }
+
+    const massimoRighe = Math.max(
+      1,
+      Math.floor(spazioRisposta / lineHeight) + 1
     );
+
+    if (righe.length > massimoRighe) {
+      righe = righe.slice(0, massimoRighe);
+      righe[righe.length - 1] = troncaRiga(
+        context,
+        righe[righe.length - 1],
+        maxTextWidth
+      );
+    }
+
+    bloccoDomanda = {
+      etichettaY: domandaEtichettaY,
+      righe: righeDomanda,
+      inizioY: domandaInizioY,
+      interlinea: domandaInterlinea,
+      rispostaEtichettaY
+    };
+  } else {
+    const spazioRighe =
+      cardBottomMassimo - 90 - 62 - 100 - textStartY;
+
+    for (
+      let dimensione = 44;
+      dimensione >= 28;
+      dimensione -= 2
+    ) {
+      const interlinea = Math.round(
+        dimensione * 1.36
+      );
+
+      context.font = `700 ${dimensione}px ${FONT_TESTO}`;
+      const spezzate = spezzaTestoInRighe(
+        context,
+        testo,
+        maxTextWidth
+      );
+      const righeDisponibili = Math.max(
+        1,
+        Math.floor(spazioRighe / interlinea) + 1
+      );
+
+      fontSize = dimensione;
+      lineHeight = interlinea;
+      righe = spezzate;
+
+      if (spezzate.length <= righeDisponibili) {
+        break;
+      }
+    }
+
+    const massimoRighe = Math.max(
+      1,
+      Math.floor(spazioRighe / lineHeight) + 1
+    );
+
+    if (righe.length > massimoRighe) {
+      righe = righe.slice(0, massimoRighe);
+      righe[righe.length - 1] = troncaRiga(
+        context,
+        righe[righe.length - 1],
+        maxTextWidth
+      );
+    }
   }
 
   const ultimaRigaY =
@@ -1385,6 +1604,41 @@ async function creaImmagineSpottedInstagram(post) {
 
   context.textAlign = "left";
   context.textBaseline = "alphabetic";
+
+  if (bloccoDomanda) {
+    context.fillStyle = "rgba(245,208,43,0.95)";
+    context.font = `700 21px ${FONT_TESTO}`;
+    context.fillText(
+      "DOMANDA",
+      textX,
+      bloccoDomanda.etichettaY
+    );
+
+    context.fillStyle = "rgba(255,255,255,0.88)";
+    context.font = `600 26px ${FONT_TESTO}`;
+    context.shadowColor = "rgba(0,0,0,0.35)";
+    context.shadowBlur = 8;
+
+    bloccoDomanda.righe.forEach((riga, indice) => {
+      context.fillText(
+        riga,
+        textX,
+        bloccoDomanda.inizioY +
+          indice * bloccoDomanda.interlinea
+      );
+    });
+
+    context.shadowBlur = 0;
+
+    context.fillStyle = "rgba(245,208,43,0.95)";
+    context.font = `700 21px ${FONT_TESTO}`;
+    context.fillText(
+      "RISPOSTA",
+      textX,
+      bloccoDomanda.rispostaEtichettaY
+    );
+  }
+
   context.font = `700 ${fontSize}px ${FONT_TESTO}`;
   context.fillStyle = "#ffffff";
   context.shadowColor = "rgba(0,0,0,0.35)";

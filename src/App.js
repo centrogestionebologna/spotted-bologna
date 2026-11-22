@@ -1402,6 +1402,20 @@ const pubblicaRispostaDomanda = async (
     nuovoPost
   );
 
+  /*
+   * Anche la risposta a una domanda è uno spotted anonimo: avvisa gli
+   * amministratori dal Worker, come per gli altri spotted pubblicati
+   * senza account, così la notifica arriva anche ad app chiusa.
+   */
+  notificaSpottedAnonimo({
+    postId: postRef.id
+  }).catch((erroreNotifica) => {
+    console.warn(
+      "Risposta pubblicata, notifica non inviata:",
+      erroreNotifica
+    );
+  });
+
   caricaPost().catch((erroreRicaricamento) => {
     console.warn(
       "Risposta pubblicata, feed non ricaricato:",

@@ -4461,6 +4461,20 @@ if (
           valoreFirestore(campi.text) || ""
         ).trim();
 
+        /*
+         * Le risposte alle domande sono spotted anonimi con domanda e
+         * risposta: l'avviso deve dirlo, altrimenti agli admin arriva
+         * solo la risposta senza il contesto della domanda.
+         */
+        const domanda = String(
+          valoreFirestore(campi.questionText) || ""
+        ).trim();
+
+        const isQuestionAnswer =
+          valoreFirestore(campi.type) ===
+            "questionAnswer" ||
+          Boolean(domanda);
+
         await notificaAmministratoriServer({
           env,
           accessToken,
@@ -4469,12 +4483,16 @@ if (
             ? "new-post"
             : "pending",
           title: postId
-            ? "📝 Nuovo spotted pubblicato"
+            ? isQuestionAnswer
+              ? "💬 Nuova risposta a una domanda"
+              : "📝 Nuovo spotted pubblicato"
             : "📩 Nuovo spotted pending",
           testo: postId
             ? (
-                testo ||
-                "È stato pubblicato un nuovo spotted."
+                isQuestionAnswer && domanda
+                  ? `“${domanda}”\n${testo}`
+                  : testo ||
+                    "È stato pubblicato un nuovo spotted."
               ).slice(0, 240)
             : "Richiede approvazione",
           postId: identificativo,
