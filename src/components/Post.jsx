@@ -148,9 +148,15 @@ const seguePost =
             <span className="post-answer-label">
               Risposta anonima
             </span>
-            <p className="post-answer-text">
-              {post.text}
-            </p>
+            {user ? (
+              <p className="post-answer-text">
+                {post.text}
+              </p>
+            ) : (
+              <p className="post-answer-locked">
+                🔒 Accedi per visualizzare la risposta
+              </p>
+            )}
           </div>
         </div>
       ) : (
