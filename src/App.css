@@ -4771,3 +4771,19 @@ details summary {
     width: 100%;
   }
 }
+
+/* Invito ad accedere quando il visitatore ha visto gli ultimi spotted. */
+.spotted-visitors-lock {
+  margin: 22px 0 8px;
+  padding: 16px 18px;
+
+  border: 1px dashed rgba(244, 197, 66, 0.45);
+  border-radius: 18px;
+  background: rgba(244, 197, 66, 0.06);
+
+  color: #f4c542;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}

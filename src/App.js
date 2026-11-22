@@ -374,6 +374,10 @@ const [followRequestInProgress, setFollowRequestInProgress] = useState({});
   useState(0);  const [postVisibili, setPostVisibili] =
   useState(10);
   const [
+  spottedVisitatoriVisibili,
+  setSpottedVisitatoriVisibili
+  ] = useState(5);
+  const [
   postScreenshotVisibili,
   setPostScreenshotVisibili
   ] = useState(3); 
@@ -3378,6 +3382,21 @@ useEffect(() => {
  */
 const testoRicerca = ricercaSpotted.toLowerCase();
 
+/*
+ * Chi non ha fatto accesso vede al massimo gli ultimi 15 spotted: la
+ * paginazione parte da 5 e si allarga di 5 alla volta, poi al posto di
+ * “Mostra altri spotted” compare l'invito ad accedere.
+ */
+const LIMITE_SPOTTED_VISITATORI = 15;
+const PASSO_SPOTTED_VISITATORI = 5;
+
+const limiteSpotted = user
+  ? postVisibili
+  : Math.min(
+      spottedVisitatoriVisibili,
+      LIMITE_SPOTTED_VISITATORI
+    );
+
 const feed = [
   ...posts
     .filter((post) =>
@@ -5276,7 +5295,7 @@ setRicercaSpotted(e.target.value)
 />
 )}
 {feed
-  .slice(0, postVisibili)
+  .slice(0, limiteSpotted)
   .map((elemento) =>
   elemento.tipo === "comunicazione" ? (
   <article
@@ -5341,7 +5360,7 @@ setRicercaSpotted(e.target.value)
   )
 )}
 
-{feed.length > postVisibili && (
+{user && feed.length > postVisibili && (
   <button
     onClick={() =>
       setPostVisibili(
@@ -5352,6 +5371,34 @@ setRicercaSpotted(e.target.value)
     Mostra altri spotted
   </button>
 )}
+
+{!user &&
+  limiteSpotted <
+    Math.min(
+      feed.length,
+      LIMITE_SPOTTED_VISITATORI
+    ) && (
+    <button
+      onClick={() =>
+        setSpottedVisitatoriVisibili(
+          spottedVisitatoriVisibili +
+            PASSO_SPOTTED_VISITATORI
+        )
+      }
+    >
+      Mostra altri spotted
+    </button>
+  )}
+
+{!user &&
+  limiteSpotted >=
+    LIMITE_SPOTTED_VISITATORI &&
+  feed.length > LIMITE_SPOTTED_VISITATORI && (
+    <p className="spotted-visitors-lock">
+      🔒 Accedi per visualizzare gli altri
+      spotted
+    </p>
+  )}
 
 </>
 )}
