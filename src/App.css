@@ -1548,6 +1548,231 @@ details summary {
   line-height: 1.55;
 }
 
+/* Finestra di accesso: scelta del metodo e form email. */
+.accesso-pannello {
+  width: min(430px, 100%);
+}
+
+.accesso-corpo {
+  padding: 20px;
+}
+
+.accesso-intro {
+  margin: 0 0 16px;
+
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.accesso-opzioni {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.accesso-opzione {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  width: 100%;
+  padding: 13px 14px;
+
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+
+  text-align: left;
+
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.accesso-opzione:hover {
+  border-color: rgba(244, 197, 66, 0.65);
+  background: rgba(244, 197, 66, 0.08);
+
+  transform: translateY(-1px);
+}
+
+.accesso-opzione:disabled {
+  opacity: 0.6;
+
+  transform: none;
+}
+
+.accesso-opzione-icona {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+
+  width: 38px;
+  height: 38px;
+
+  border-radius: 50%;
+
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.accesso-opzione-icona.is-google {
+  background: #4285f4;
+  color: #ffffff;
+}
+
+.accesso-opzione-icona.is-email {
+  border: 1px solid rgba(244, 197, 66, 0.4);
+  background: rgba(244, 197, 66, 0.14);
+  color: #f4c542;
+}
+
+.accesso-opzione-testo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accesso-opzione-testo strong {
+  font-size: 14px;
+}
+
+.accesso-opzione-testo small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.accesso-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accesso-indietro {
+  align-self: flex-start;
+
+  padding: 0;
+
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+
+  font-size: 12px;
+}
+
+.accesso-indietro:hover {
+  color: #f4c542;
+}
+
+.accesso-titolo-form {
+  margin: 0;
+
+  color: #f4c542;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.accesso-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.accesso-campo span {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.accesso-campo input {
+  margin: 0;
+  padding: 12px 14px;
+
+  border-radius: 14px;
+
+  font-size: 14px;
+}
+
+.accesso-nota {
+  margin: 0;
+
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.accesso-errore,
+.accesso-avviso {
+  margin: 0;
+  padding: 10px 12px;
+
+  border-radius: 12px;
+
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.accesso-errore {
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.1);
+  color: #fca5a5;
+}
+
+.accesso-avviso {
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  background: rgba(74, 222, 128, 0.08);
+  color: #86efac;
+}
+
+.accesso-invia {
+  width: 100%;
+  margin-top: 2px;
+  padding: 13px 18px;
+
+  background: #f4c542;
+  color: #151515;
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.accesso-invia:disabled {
+  opacity: 0.6;
+}
+
+.accesso-collegamenti {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+
+  margin-top: 4px;
+}
+
+.accesso-link {
+  padding: 0;
+
+  background: transparent;
+  color: rgba(255, 255, 255, 0.66);
+
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.accesso-link:hover {
+  color: #f4c542;
+}
+
 /* Intestazione su una sola riga: marchio, nickname, campanella, esci. */
 .header {
   flex-wrap: nowrap;

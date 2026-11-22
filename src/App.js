@@ -14,6 +14,9 @@ import "./App.css";
 
 import {
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   onAuthStateChanged,
   signOut
 } from "firebase/auth";
@@ -387,6 +390,34 @@ const [followRequestInProgress, setFollowRequestInProgress] = useState({});
  */
 const [pannelloProfilo, setPannelloProfilo] =
   useState(null);
+
+/*
+ * Finestra di accesso: prima si sceglie il metodo (Google o email),
+ * poi eventualmente si compila il form email.
+ */
+const [mostraAccesso, setMostraAccesso] =
+  useState(false);
+
+const [metodoAccesso, setMetodoAccesso] =
+  useState("scelta");
+
+const [modalitaEmail, setModalitaEmail] =
+  useState("login");
+
+const [emailAccesso, setEmailAccesso] =
+  useState("");
+
+const [passwordAccesso, setPasswordAccesso] =
+  useState("");
+
+const [erroreAccesso, setErroreAccesso] =
+  useState("");
+
+const [avvisoAccesso, setAvvisoAccesso] =
+  useState("");
+
+const [accessoInCorso, setAccessoInCorso] =
+  useState(false);
 
 const [notifications, setNotifications] =
   useState([]);
@@ -1097,7 +1128,174 @@ setPosts(lista);
     setComments(lista);
   };
 
+  const messaggioErroreAccesso = (errore) => {
+    const codice = errore?.code || "";
+
+    switch (codice) {
+      case "auth/invalid-email":
+        return "Inserisci un indirizzo email valido.";
+      case "auth/missing-email":
+        return "Inserisci la tua email.";
+      case "auth/missing-password":
+        return "Inserisci la password.";
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+      case "auth/invalid-credential":
+        return "Email o password non corretti.";
+      case "auth/email-already-in-use":
+        return "Esiste già un account con questa email. Prova ad accedere.";
+      case "auth/account-exists-with-different-credential":
+        return "Questa email è già collegata a un altro metodo di accesso. Prova con Google o con la password.";
+      case "auth/weak-password":
+        return "La password deve contenere almeno 6 caratteri.";
+      case "auth/too-many-requests":
+        return "Troppi tentativi. Riprova tra qualche minuto.";
+      case "auth/network-request-failed":
+        return "Connessione assente o instabile. Controlla la rete e riprova.";
+      case "auth/operation-not-allowed":
+        return "L'accesso con email non è ancora attivo. Riprova più tardi.";
+      case "auth/popup-blocked":
+        return "Il browser ha bloccato la finestra di Google. Consentila e riprova.";
+      default:
+        return "Non è stato possibile completare l'accesso. Riprova.";
+    }
+  };
+
+  const apriAccesso = () => {
+    setMetodoAccesso("scelta");
+    setModalitaEmail("login");
+    setEmailAccesso("");
+    setPasswordAccesso("");
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+    setMostraAccesso(true);
+  };
+
+  const chiudiAccesso = () => {
+    setMostraAccesso(false);
+    setMetodoAccesso("scelta");
+    setPasswordAccesso("");
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+  };
+
+  const accediConEmail = async (evento) => {
+    evento.preventDefault();
+
+    if (accessoInCorso) return;
+
+    const email = emailAccesso.trim();
+
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+
+    if (!email) {
+      setErroreAccesso("Inserisci la tua email.");
+      return;
+    }
+
+    if (!passwordAccesso) {
+      setErroreAccesso("Inserisci la password.");
+      return;
+    }
+
+    setAccessoInCorso(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, email, passwordAccesso);
+      setPasswordAccesso("");
+      setMostraAccesso(false);
+    } catch (errore) {
+      console.error(errore);
+      setErroreAccesso(messaggioErroreAccesso(errore));
+    } finally {
+      setAccessoInCorso(false);
+    }
+  };
+
+  const registratiConEmail = async (evento) => {
+    evento.preventDefault();
+
+    if (accessoInCorso) return;
+
+    const email = emailAccesso.trim();
+
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+
+    if (!email) {
+      setErroreAccesso("Inserisci la tua email.");
+      return;
+    }
+
+    if (passwordAccesso.length < 6) {
+      setErroreAccesso(
+        "La password deve contenere almeno 6 caratteri."
+      );
+      return;
+    }
+
+    setAccessoInCorso(true);
+
+    try {
+      await createUserWithEmailAndPassword(
+        auth,
+        email,
+        passwordAccesso
+      );
+      setPasswordAccesso("");
+      setMostraAccesso(false);
+    } catch (errore) {
+      console.error(errore);
+      setErroreAccesso(messaggioErroreAccesso(errore));
+    } finally {
+      setAccessoInCorso(false);
+    }
+  };
+
+  const recuperaPassword = async (evento) => {
+    evento.preventDefault();
+
+    if (accessoInCorso) return;
+
+    const email = emailAccesso.trim();
+
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+
+    if (!email) {
+      setErroreAccesso("Inserisci la tua email.");
+      return;
+    }
+
+    setAccessoInCorso(true);
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setAvvisoAccesso(
+        "Ti abbiamo inviato un'email con il link per reimpostare la password. Controlla anche lo spam."
+      );
+    } catch (errore) {
+      console.error(errore);
+
+      if (errore?.code === "auth/user-not-found") {
+        // Non riveliamo se l'indirizzo esiste o meno.
+        setAvvisoAccesso(
+          "Se l'indirizzo è registrato, riceverai a breve un'email con il link per reimpostare la password."
+        );
+      } else {
+        setErroreAccesso(messaggioErroreAccesso(errore));
+      }
+    } finally {
+      setAccessoInCorso(false);
+    }
+  };
+
   const loginGoogle = async () => {
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+    setAccessoInCorso(true);
+
     try {
       const result = await signInWithPopup(auth, provider);
 
@@ -1123,7 +1321,7 @@ setPosts(lista);
 
   await signOut(auth);
 
-  return;
+  return false;
 }
 if (
   userSnap.data().role ===
@@ -1184,9 +1382,22 @@ setNotifyAllLikes(
 
 
       setUser(currentUser);
+      setMostraAccesso(false);
+      return true;
 
     } catch (error) {
       console.error(error);
+
+      if (
+        error?.code !== "auth/popup-closed-by-user" &&
+        error?.code !== "auth/cancelled-popup-request"
+      ) {
+        setErroreAccesso(messaggioErroreAccesso(error));
+      }
+
+      return false;
+    } finally {
+      setAccessoInCorso(false);
     }
   };
 
@@ -3844,6 +4055,269 @@ return (
   </div>
 )}
 
+    {!user && mostraAccesso && (
+  <div
+    className="pannello-sfondo"
+    role="presentation"
+    onClick={chiudiAccesso}
+  >
+    <div
+      className="pannello accesso-pannello"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="accesso-titolo"
+      onClick={(evento) => evento.stopPropagation()}
+    >
+
+      <div className="pannello-testa">
+
+        <h2 id="accesso-titolo">🔐 Accedi</h2>
+
+        <button
+          type="button"
+          className="pannello-chiudi"
+          aria-label="Chiudi"
+          onClick={chiudiAccesso}
+        >
+          ×
+        </button>
+
+      </div>
+
+      <div className="pannello-corpo accesso-corpo">
+
+        {metodoAccesso === "scelta" ? (
+          <>
+            <p className="accesso-intro">
+              Scegli come entrare su Spotted Bologna.
+            </p>
+
+            <div className="accesso-opzioni">
+
+              <button
+                type="button"
+                className="accesso-opzione"
+                onClick={loginGoogle}
+                disabled={accessoInCorso}
+              >
+                <span
+                  className="accesso-opzione-icona is-google"
+                  aria-hidden="true"
+                >
+                  G
+                </span>
+
+                <span className="accesso-opzione-testo">
+                  <strong>Continua con Google</strong>
+                  <small>Usa il tuo account Google</small>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="accesso-opzione"
+                onClick={() => {
+                  setMetodoAccesso("email");
+                  setErroreAccesso("");
+                  setAvvisoAccesso("");
+                }}
+              >
+                <span
+                  className="accesso-opzione-icona is-email"
+                  aria-hidden="true"
+                >
+                  ✉️
+                </span>
+
+                <span className="accesso-opzione-testo">
+                  <strong>Continua con email</strong>
+                  <small>
+                    Accedi o crea un account con email e password
+                  </small>
+                </span>
+              </button>
+
+            </div>
+
+            {erroreAccesso && (
+              <p className="accesso-errore" role="alert">
+                {erroreAccesso}
+              </p>
+            )}
+          </>
+        ) : (
+          <form
+            className="accesso-form"
+            onSubmit={
+              modalitaEmail === "login"
+                ? accediConEmail
+                : modalitaEmail === "registrazione"
+                  ? registratiConEmail
+                  : recuperaPassword
+            }
+          >
+
+            <button
+              type="button"
+              className="accesso-indietro"
+              onClick={() => {
+                setMetodoAccesso("scelta");
+                setErroreAccesso("");
+                setAvvisoAccesso("");
+              }}
+            >
+              ← Altri metodi di accesso
+            </button>
+
+            <h3 className="accesso-titolo-form">
+              {modalitaEmail === "login"
+                ? "Accedi con email"
+                : modalitaEmail === "registrazione"
+                  ? "Crea un account"
+                  : "Recupera la password"}
+            </h3>
+
+            <label className="accesso-campo">
+              <span>Email</span>
+              <input
+                type="email"
+                value={emailAccesso}
+                onChange={(evento) =>
+                  setEmailAccesso(evento.target.value)
+                }
+                placeholder="nome@esempio.it"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck="false"
+                required
+              />
+            </label>
+
+            {modalitaEmail !== "recupero" && (
+              <label className="accesso-campo">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={passwordAccesso}
+                  onChange={(evento) =>
+                    setPasswordAccesso(evento.target.value)
+                  }
+                  placeholder={
+                    modalitaEmail === "registrazione"
+                      ? "Almeno 6 caratteri"
+                      : "La tua password"
+                  }
+                  autoComplete={
+                    modalitaEmail === "registrazione"
+                      ? "new-password"
+                      : "current-password"
+                  }
+                  required
+                />
+              </label>
+            )}
+
+            {modalitaEmail === "registrazione" && (
+              <p className="accesso-nota">
+                Il nickname lo scegli subito dopo il primo accesso.
+              </p>
+            )}
+
+            {erroreAccesso && (
+              <p className="accesso-errore" role="alert">
+                {erroreAccesso}
+              </p>
+            )}
+
+            {avvisoAccesso && (
+              <p className="accesso-avviso" role="status">
+                {avvisoAccesso}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="accesso-invia"
+              disabled={accessoInCorso}
+            >
+              {accessoInCorso
+                ? "Attendi…"
+                : modalitaEmail === "login"
+                  ? "Accedi"
+                  : modalitaEmail === "registrazione"
+                    ? "Crea account"
+                    : "Invia link"}
+            </button>
+
+            <div className="accesso-collegamenti">
+
+              {modalitaEmail === "login" && (
+                <>
+                  <button
+                    type="button"
+                    className="accesso-link"
+                    onClick={() => {
+                      setModalitaEmail("recupero");
+                      setErroreAccesso("");
+                      setAvvisoAccesso("");
+                    }}
+                  >
+                    Password dimenticata?
+                  </button>
+
+                  <button
+                    type="button"
+                    className="accesso-link"
+                    onClick={() => {
+                      setModalitaEmail("registrazione");
+                      setErroreAccesso("");
+                      setAvvisoAccesso("");
+                    }}
+                  >
+                    Non hai un account? Registrati
+                  </button>
+                </>
+              )}
+
+              {modalitaEmail === "registrazione" && (
+                <button
+                  type="button"
+                  className="accesso-link"
+                  onClick={() => {
+                    setModalitaEmail("login");
+                    setErroreAccesso("");
+                    setAvvisoAccesso("");
+                  }}
+                >
+                  Hai già un account? Accedi
+                </button>
+              )}
+
+              {modalitaEmail === "recupero" && (
+                <button
+                  type="button"
+                  className="accesso-link"
+                  onClick={() => {
+                    setModalitaEmail("login");
+                    setErroreAccesso("");
+                    setAvvisoAccesso("");
+                  }}
+                >
+                  Torna all'accesso
+                </button>
+              )}
+
+            </div>
+
+          </form>
+        )}
+
+      </div>
+
+    </div>
+  </div>
+)}
+
     {!user && (
   <div className="login-card">
 
@@ -3867,15 +4341,9 @@ return (
     <button
       type="button"
       className="login-google"
-      onClick={loginGoogle}
+      onClick={apriAccesso}
     >
-      <span
-        className="login-google-badge"
-        aria-hidden="true"
-      >
-        G
-      </span>
-      Accedi con Google
+      Accedi
     </button>
 
     <p className="login-note">
