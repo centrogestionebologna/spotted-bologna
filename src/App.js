@@ -3942,6 +3942,14 @@ if (!avvioConcluso) {
   );
 }
 
+/*
+ * Primo accesso: finche' l'utente non ha scelto il nickname e poi le
+ * preferenze di notifica si mostra solo il passaggio di onboarding,
+ * senza gruppi ne' feed degli spotted.
+ */
+const onboardingInCorso =
+  Boolean(user) && (!savedNickname || passoNotifiche);
+
 const supportoPushOnboarding = infoSupportoPush();
 
 const pushGiaAttive =
@@ -4515,7 +4523,7 @@ return (
   </div>
 )}
 
-{user && (!savedNickname || passoNotifiche) ? null : (
+{onboardingInCorso ? null : (
 <>
 
 <div className="section-card spotted-composer">
@@ -4613,9 +4621,37 @@ return (
 />
 
 {user && mostraPropostaGruppo && (
-<div className="section-card">
+<div
+  className="pannello-sfondo"
+  role="presentation"
+  onClick={() => setMostraPropostaGruppo(false)}
+>
+  <div
+    className="pannello"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="proposta-gruppo-titolo"
+    onClick={(evento) => evento.stopPropagation()}
+  >
 
-  <h2>📚 Proponi un gruppo</h2>
+    <div className="pannello-testa">
+
+      <h2 id="proposta-gruppo-titolo">
+        📚 Proponi un gruppo
+      </h2>
+
+      <button
+        type="button"
+        className="pannello-chiudi"
+        aria-label="Chiudi"
+        onClick={() => setMostraPropostaGruppo(false)}
+      >
+        ×
+      </button>
+
+    </div>
+
+    <div className="pannello-corpo">
 
   <p>
     Descrivi bene il gruppo.
@@ -4682,14 +4718,47 @@ return (
   📩 Invia proposta
 </button>
 
+    </div>
+
+  </div>
 </div>
 
 )}
 
 {isAdmin && mostraComunicazioneServizio && (
-<div className="section-card service-notice-form">
+<div
+  className="pannello-sfondo"
+  role="presentation"
+  onClick={() => setMostraComunicazioneServizio(false)}
+>
+  <div
+    className="pannello"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="comunicazione-servizio-titolo"
+    onClick={(evento) => evento.stopPropagation()}
+  >
 
-  <h2>🔧 Comunicazione di servizio</h2>
+    <div className="pannello-testa">
+
+      <h2 id="comunicazione-servizio-titolo">
+        🔧 Comunicazione di servizio
+      </h2>
+
+      <button
+        type="button"
+        className="pannello-chiudi"
+        aria-label="Chiudi"
+        onClick={() =>
+          setMostraComunicazioneServizio(false)
+        }
+      >
+        ×
+      </button>
+
+    </div>
+
+    <div className="pannello-corpo">
 
   <p>
     Compare tra gli spotted con il bordo dorato e arriva subito come
@@ -4738,6 +4807,9 @@ return (
       : "📣 Pubblica e notifica tutti"}
   </button>
 
+    </div>
+
+  </div>
 </div>
 )}
 
@@ -4920,7 +4992,7 @@ return (
   </>
 )}
 
-{user && (
+{user && !onboardingInCorso && (
   <details className="admin-dashboard">
 
 <summary
@@ -5187,7 +5259,10 @@ return (
 
 )}
   </details>
-)}  
+)}
+
+{!onboardingInCorso && (
+<>
 
 <h2>Spotted pubblicati</h2>
 {isAdmin && (
@@ -5276,6 +5351,9 @@ setRicercaSpotted(e.target.value)
   >
     Mostra altri spotted
   </button>
+)}
+
+</>
 )}
 
     </div>
