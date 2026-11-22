@@ -2593,14 +2593,115 @@ async function contaDocumentiCreatiDopo({
 }
 
 /*
- * Recupera gli spotted più recenti del periodo per il riepilogo.
+ * Larghezza di una riga di notifica push: oltre questa soglia il testo
+ * dello spotted viene tagliato con i puntini, cosi' ogni spotted resta
+ * su una riga sola.
+ */
+const MASSIMO_CARATTERI_RIGA_PUSH = 42;
+
+/*
+ * Le push web hanno un limite di circa 4 KB per messaggio: il corpo
+ * viene fermato prima, con una riga finale che dice quanti spotted
+ * non ci stanno. Il conto e' in byte perche' emoji e accenti pesano
+ * piu' di un carattere.
+ */
+const MASSIMO_BYTE_CORPO_PUSH = 3500;
+
+const codificatoreTestoPush = new TextEncoder();
+
+function byteTestoPush(testo) {
+  return codificatoreTestoPush.encode(
+    String(testo || "")
+  ).length;
+}
+
+/*
+ * Testo di uno spotted ridotto a una riga: si taglia sull'ultima
+ * parola intera e si chiude con i puntini.
+ */
+function rigaSpottedPush(
+  testo,
+  massimo = MASSIMO_CARATTERI_RIGA_PUSH
+) {
+  const pulito = String(testo || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!pulito) return "";
+
+  if (pulito.length <= massimo) return pulito;
+
+  const tagliato = pulito.slice(
+    0,
+    Math.max(1, massimo - 3)
+  );
+
+  const ultimoSpazio = tagliato.lastIndexOf(" ");
+
+  const base =
+    ultimoSpazio > massimo * 0.5
+      ? tagliato.slice(0, ultimoSpazio)
+      : tagliato;
+
+  return `${base.trim()}...`;
+}
+
+/*
+ * Corpo della push di riepilogo: il conteggio in testa e poi tutti gli
+ * spotted del periodo, uno per riga.
+ */
+function componiCorpoPushRiepilogo({
+  spots,
+  corpo,
+  intestazione,
+  righe
+}) {
+  if (spots === 0 || righe.length === 0) {
+    return corpo;
+  }
+
+  const voci = righe.map(
+    (riga) => `• ${riga}`
+  );
+
+  const scelte = [];
+  let byteTotali = byteTestoPush(intestazione);
+
+  for (const voce of voci) {
+    const byteVoce = byteTestoPush(voce) + 1;
+
+    /*
+     * Si tiene spazio per la riga finale "...e altri N spotted".
+     */
+    if (
+      byteTotali + byteVoce >
+      MASSIMO_BYTE_CORPO_PUSH - 40
+    ) {
+      break;
+    }
+
+    scelte.push(voce);
+    byteTotali += byteVoce;
+  }
+
+  const mancanti = voci.length - scelte.length;
+
+  if (mancanti > 0) {
+    scelte.push(`...e altri ${mancanti} spotted`);
+  }
+
+  return [intestazione, ...scelte].join("\n");
+}
+
+/*
+ * Recupera gli spotted del periodo per il riepilogo.
  * Una sola query per riepilogo, non una per destinatario.
  */
 async function recuperaAnteprimePost({
   env,
   accessToken,
   inizioISO,
-  limite = 3
+  limite = null
 }) {
   const endpoint =
     `https://firestore.googleapis.com/v1/projects/` +
@@ -2640,7 +2741,7 @@ async function recuperaAnteprimePost({
             direction: "DESCENDING"
           }
         ],
-        limit: limite
+        ...(limite ? { limit: limite } : {})
       }
     })
   });
@@ -2723,20 +2824,14 @@ async function eseguiRiepilogo({
       inizioISO
     });
 
-  const commenti =
-    await contaDocumentiCreatiDopo({
-      env,
-      accessToken,
-      collectionId: "comments",
-      inizioISO
-    });
-
+  /*
+   * Tutti gli spotted del periodo: la push li elenca uno per riga.
+   */
   const anteprime =
     await recuperaAnteprimePost({
       env,
       accessToken,
-      inizioISO,
-      limite: 3
+      inizioISO
     });
 
   const titolo = settimanale
@@ -2751,20 +2846,25 @@ async function eseguiRiepilogo({
     spots === 0
       ? "Nessuno nuovo spotted, scrivine uno te!"
       : settimanale
-        ? `Questa settimana ${spots} nuovi spotted e ${commenti} commenti.`
-        : `Ieri ${spots} nuovi spotted e ${commenti} commenti.`;
+        ? `Questa settimana ${spots} nuovi spotted.`
+        : `Ieri ${spots} nuovi spotted.`;
 
   /*
-   * La push resta breve: conteggi e una sola citazione. Le altre
-   * anteprime sono nella card interna, dove c'è spazio per leggerle.
+   * La push elenca tutti gli spotted del periodo, uno per riga e
+   * tagliati ai puntini quando superano una riga di notifica.
    */
-  const corpoPush =
-    spots > 0 && anteprime[0]
-      ? `${corpo}\n“${anteprimaTesto(
-          anteprime[0].text,
-          100
-        )}”`
-      : corpo;
+  const corpoPush = componiCorpoPushRiepilogo({
+    spots,
+    corpo,
+    intestazione: settimanale
+      ? `Questa settimana ${spots} nuovi spotted`
+      : `Ieri ${spots} nuovi spotted`,
+    righe: anteprime
+      .map((anteprima) =>
+        rigaSpottedPush(anteprima.text)
+      )
+      .filter(Boolean)
+  });
 
   const preferenza = settimanale
     ? "settimanale"
@@ -2791,9 +2891,8 @@ async function eseguiRiepilogo({
       titolo,
       corpo,
       corpoPush,
-      previews: anteprime,
+      previews: anteprime.slice(0, 3),
       spots,
-      commenti,
       destinatari: destinatari.length,
       notificate: 0,
       pushInviate: 0,
@@ -2820,7 +2919,7 @@ async function eseguiRiepilogo({
           body: corpo,
           postId: null,
           notificationId,
-          previews: anteprime
+          previews: anteprime.slice(0, 3)
         });
 
       if (!notifica) continue;
@@ -2865,9 +2964,8 @@ async function eseguiRiepilogo({
     titolo,
     corpo,
     corpoPush,
-    previews: anteprime,
+    previews: anteprime.slice(0, 3),
     spots,
-    commenti,
     destinatari: destinatari.length,
     notificate,
     pushInviate,
