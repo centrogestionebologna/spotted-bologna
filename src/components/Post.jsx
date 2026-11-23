@@ -4,6 +4,29 @@ import { scaricaImmagineSpotted } from "../utils/immagineSpotted";
 
 const linkValido = (link) => /^https?:\/\//i.test(link || "");
 
+const chiaveUtente = (utente) => utente?.id || utente?.uid || "";
+
+const nomeDaUid = (uid, utenti) => {
+  if (!uid || uid === "anonimo") {
+    return "Utente anonimo";
+  }
+
+  const utente = utenti.find(
+    (voce) => chiaveUtente(voce) === uid
+  );
+
+  return (
+    utente?.nickname ||
+    utente?.name ||
+    "Utente sconosciuto"
+  );
+};
+
+const nomiSegnalatori = (reportedBy, utenti) =>
+  (Array.isArray(reportedBy) ? reportedBy : []).map(
+    (uid) => nomeDaUid(uid, utenti)
+  );
+
 function Post({
   post,
   comments,
@@ -21,8 +44,21 @@ function Post({
   toggleFollowPost,
   followRequestInProgress,
   showDownloadImage = false,
+  utenti = [],
 }) {
   const [showLikes, setShowLikes] = useState(false);
+
+  /*
+   * Solo gli admin vedono chi ha scritto lo spotted e chi lo ha
+   * segnalato: per gli altri utenti lo spotted resta anonimo.
+   */
+  const autoreSpotted = isAdmin
+    ? nomeDaUid(post.authorId, utenti)
+    : "";
+
+  const segnalatoriSpotted = isAdmin
+    ? nomiSegnalatori(post.reportedBy, utenti)
+    : [];
 
   const isGroupProposal = post.type === "groupProposal";
   const isQuestionAnswer =
@@ -280,8 +316,23 @@ const seguePost =
 
       {/* Azioni admin */}
       {isAdmin && (
-        <div style={{ textAlign: "right", marginBottom: "10px" }}>
-          <button onClick={confermaElimina}>🗑 Elimina spotted</button>
+        <div style={{ marginBottom: "10px" }}>
+          <p className="post-admin-meta">
+            👤 Autore: {autoreSpotted}
+          </p>
+
+          {segnalatoriSpotted.length > 0 && (
+            <p className="post-admin-meta">
+              🚩 Segnalato da:{" "}
+              {segnalatoriSpotted.join(", ")}
+            </p>
+          )}
+
+          <div style={{ textAlign: "right" }}>
+            <button onClick={confermaElimina}>
+              🗑 Elimina spotted
+            </button>
+          </div>
         </div>
       )}
 

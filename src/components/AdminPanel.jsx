@@ -20,6 +20,33 @@ const dettaglioPubblicita = (post) =>
     .replace(/^Pubblicità rilevata:\s*/i, "")
     .trim();
 
+const chiaveUtente = (utente) => utente?.id || utente?.uid || "";
+
+/*
+ * Uno spotted puo' arrivare da un utente loggato oppure senza autore:
+ * le risposte alle domande e i vecchi spotted non hanno un authorId.
+ */
+const nomeDaUid = (uid, utenti) => {
+  if (!uid || uid === "anonimo") {
+    return "Utente anonimo";
+  }
+
+  const utente = utenti.find(
+    (voce) => chiaveUtente(voce) === uid
+  );
+
+  return (
+    utente?.nickname ||
+    utente?.name ||
+    "Utente sconosciuto"
+  );
+};
+
+const nomiSegnalatori = (reportedBy, utenti) =>
+  (Array.isArray(reportedBy) ? reportedBy : []).map(
+    (uid) => nomeDaUid(uid, utenti)
+  );
+
 /*
  * Instagram accetta solo JPEG: la card dell'app viene disegnata su
  * canvas, quindi la riesportiamo in JPEG riducendo la qualita' finche'
@@ -226,13 +253,18 @@ function AdminPanel({
   pendingPosts,
   approvaPost,
   rifiutaPost,
-  pubblicaInstagram
+  pubblicaInstagram,
+  utenti = []
 }) {
   return (
     <>
       {pendingPosts.map((post) => {
         const isPubblicita = pubblicitaRilevata(post);
         const dettaglio = dettaglioPubblicita(post);
+        const segnalatori = nomiSegnalatori(
+          post.reportedBy,
+          utenti
+        );
 
         return (
           <article
@@ -302,9 +334,16 @@ function AdminPanel({
               </>
             )}
 
+            <p className="admin-pending-meta">
+              <strong>👤 Autore:</strong>{" "}
+              {nomeDaUid(post.authorId, utenti)}
+            </p>
+
             {post.reports > 0 && (
               <p className="admin-pending-meta">
                 🚩 Segnalazioni: {post.reports}
+                {segnalatori.length > 0 &&
+                  ` — ${segnalatori.join(", ")}`}
               </p>
             )}
 

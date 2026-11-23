@@ -4787,3 +4787,14 @@ details summary {
   line-height: 1.4;
   text-align: center;
 }
+
+/* Autore e segnalatori di uno spotted: visibili solo agli admin. */
+.post-admin-meta {
+  margin: 0 0 6px;
+
+  color: #b8b8b8;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+}

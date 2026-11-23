@@ -4919,6 +4919,7 @@ return (
     pubblicaInstagram={
       pubblicaSpottedAncheSuInstagram
     }
+    utenti={utenti}
   />
 
 </details>
@@ -5356,6 +5357,7 @@ setRicercaSpotted(e.target.value)
     postFollowers={postFollowers}
     toggleFollowPost={toggleFollowPost}
     followRequestInProgress={followRequestInProgress}
+    utenti={utenti}
   />
   )
 )}
