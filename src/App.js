@@ -59,7 +59,6 @@ import {
   ascoltaNotificheInPrimoPiano,
   mostraNotificaInPrimoPiano,
   sincronizzaTokenPush,
-  attivaNotifichePush,
   verificaNotifichePush,
   infoSupportoPush
 } from "./services/pushNotifications";
@@ -500,18 +499,10 @@ const [avvioConcluso, setAvvioConcluso] = useState(false);
 const [passoNotifiche, setPassoNotifiche] = useState(false);
 const [salvataggioNotifiche, setSalvataggioNotifiche] =
   useState(false);
-const [attivazionePushOnboarding, setAttivazionePushOnboarding] =
-  useState(false);
 const [messaggioPushOnboarding, setMessaggioPushOnboarding] =
   useState("");
-const [pushAttiveOnboarding, setPushAttiveOnboarding] =
+const [pushOnboardingFallita, setPushOnboardingFallita] =
   useState(false);
-const [verificaPushOnboarding, setVerificaPushOnboarding] =
-  useState(false);
-const [
-  messaggioVerificaPushOnboarding,
-  setMessaggioVerificaPushOnboarding
-] = useState("");
 
   const [newsletter, setNewsletter] =
   useState("mai");
@@ -1489,91 +1480,79 @@ const salvaNickname = async () => {
 };
 
 /*
- * Chiude il passo delle notifiche salvando la frequenza scelta. Il
- * fallimento non deve bloccare l'ingresso nell'app: le preferenze
- * restano modificabili dal profilo.
+ * Chiude il passo delle notifiche salvando la frequenza scelta. Se
+ * l'utente ha scelto un riepilogo, lo stesso clic attiva le push (con
+ * la richiesta di permesso del browser) e invia subito la notifica di
+ * prova; chi sceglie “Mai” non attiva nulla. Il fallimento non deve
+ * bloccare l'ingresso nell'app: le preferenze restano modificabili dal
+ * profilo e un secondo tocco su Continua entra senza push.
  */
 const confermaOnboardingNotifiche = async () => {
+  const vuolePush = newsletter !== "mai";
+  const provaPush = vuolePush && !pushOnboardingFallita;
+
   setSalvataggioNotifiche(true);
-
-  try {
-    if (user) {
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          newsletter,
-          notificheImpostate: true
-        },
-        { merge: true }
-      );
-    }
-  } catch (errore) {
-    console.warn(
-      "Preferenze notifiche non salvate:",
-      errore
-    );
-  } finally {
-    setSalvataggioNotifiche(false);
-    setPassoNotifiche(false);
-  }
-};
-
-const attivaPushOnboarding = async () => {
-  setAttivazionePushOnboarding(true);
   setMessaggioPushOnboarding("");
 
-  try {
-    await attivaNotifichePush();
+  const salvaPreferenze = async () => {
+    try {
+      if (user) {
+        await setDoc(
+          doc(db, "users", user.uid),
+          {
+            newsletter,
+            notificheImpostate: true
+          },
+          { merge: true }
+        );
+      }
+    } catch (errore) {
+      console.warn(
+        "Preferenze notifiche non salvate:",
+        errore
+      );
+    }
+  };
 
-    setPushAttiveOnboarding(true);
+  /*
+   * La richiesta di permesso parte subito dopo il clic, prima di ogni
+   * altra attesa: alcuni browser la accettano solo mentre il tocco e'
+   * ancora “fresco”. verificaNotifichePush attiva il token del
+   * dispositivo e chiede al Worker la push di prova, che arriva con il
+   * messaggio “Le notifiche sono attive!”.
+   */
+  if (provaPush) {
     setMessaggioPushOnboarding(
-      "✅ Notifiche push attivate su questo dispositivo."
-    );
-  } catch (errore) {
-    console.warn(
-      "Attivazione push dal primo accesso fallita:",
-      errore
+      "🔔 Consenti le notifiche nel messaggio del browser."
     );
 
-    setMessaggioPushOnboarding(
-      `❌ ${errore.message}`
-    );
-  } finally {
-    setAttivazionePushOnboarding(false);
+    try {
+      await verificaNotifichePush();
+
+      setPushOnboardingFallita(false);
+    } catch (errore) {
+      console.warn(
+        "Push dal primo accesso non attivate:",
+        errore
+      );
+
+      /* La frequenza scelta non va persa anche se le push falliscono. */
+      await salvaPreferenze();
+
+      setPushOnboardingFallita(true);
+      setSalvataggioNotifiche(false);
+      setMessaggioPushOnboarding(
+        `❌ ${errore.message}`
+      );
+
+      return;
+    }
   }
-};
 
-const verificaNotificheOnboarding = async () => {
-  setVerificaPushOnboarding(true);
-  setMessaggioVerificaPushOnboarding("");
+  await salvaPreferenze();
 
-  try {
-    const risultato = await verificaNotifichePush();
-
-    setPushAttiveOnboarding(true);
-    const totale =
-      risultato.totalDevices ||
-      risultato.sent;
-
-    setMessaggioVerificaPushOnboarding(
-      `✅ Notifica di prova inviata${
-        totale > 1
-          ? ` (${risultato.sent} su ${totale} dispositivi)`
-          : ""
-      }. Controlla la notifica sul dispositivo.`
-    );
-  } catch (errore) {
-    console.warn(
-      "Verifica push dal primo accesso fallita:",
-      errore
-    );
-
-    setMessaggioVerificaPushOnboarding(
-      `❌ ${errore.message}`
-    );
-  } finally {
-    setVerificaPushOnboarding(false);
-  }
+  setSalvataggioNotifiche(false);
+  setPassoNotifiche(false);
 };
 
 const pubblicaRispostaDomanda = async (
@@ -3971,11 +3950,6 @@ const onboardingInCorso =
 
 const supportoPushOnboarding = infoSupportoPush();
 
-const pushGiaAttive =
-  pushAttiveOnboarding ||
-  (typeof Notification !== "undefined" &&
-    Notification.permission === "granted");
-
 const analisiPubblicitaSpotted =
   analizzaPubblicita(spottedText);
 
@@ -4479,32 +4453,10 @@ return (
       like sugli spotted che segui, più le novità importanti.
     </p>
 
-    <button
-      type="button"
-      onClick={attivaPushOnboarding}
-      disabled={
-        attivazionePushOnboarding || pushGiaAttive
-      }
-    >
-      {attivazionePushOnboarding
-        ? "Attivazione..."
-        : pushGiaAttive
-        ? "🔔 Push attive su questo dispositivo"
-        : "🔔 Attiva notifiche push"}
-    </button>
-
-    <button
-      type="button"
-      onClick={verificaNotificheOnboarding}
-      disabled={
-        verificaPushOnboarding ||
-        attivazionePushOnboarding
-      }
-    >
-      {verificaPushOnboarding
-        ? "Invio della prova..."
-        : "📨 Invia notifica di prova"}
-    </button>
+    <p>
+      Scegliendo un riepilogo, “Continua” attiva le notifiche su questo
+      dispositivo e ti invia subito una notifica di prova.
+    </p>
 
     {supportoPushOnboarding.iOS &&
       !supportoPushOnboarding.standalone && (
@@ -4521,12 +4473,6 @@ return (
       </p>
     )}
 
-    {messaggioVerificaPushOnboarding && (
-      <p className="push-notifications-message">
-        {messaggioVerificaPushOnboarding}
-      </p>
-    )}
-
     <div className="onboarding-notifiche-actions">
       <button
         type="button"
@@ -4534,7 +4480,9 @@ return (
         disabled={salvataggioNotifiche}
       >
         {salvataggioNotifiche
-          ? "Salvataggio..."
+          ? "Attivazione notifiche..."
+          : pushOnboardingFallita
+          ? "Continua senza notifiche push"
           : "Continua"}
       </button>
     </div>
