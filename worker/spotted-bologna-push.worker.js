@@ -14,7 +14,8 @@ const GIORNI_PRIMA_DEL_RINNOVO = 40;
  */
 const AI_CHAT_URL =
   "https://freebuff.com/api/v1/paid/chat/completions";
-const AI_MODELLO_PREDEFINITO = "gpt-4o-mini";
+const AI_MODELLO_PREDEFINITO =
+  "deepseek/deepseek-v4-flash";
 const MASSIMO_BOZZE_PER_RICHIESTA = 5;
 
 /*
