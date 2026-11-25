@@ -207,11 +207,19 @@ function InstagramSettings({
                 </div>
               </div>
             ) : (
-              <p className="community-rules-text">
-                {stato.configured
-                  ? "Il token è presente ma Instagram non ha risposto. Rinnova il token o controlla che la pagina sia ancora collegata all'app."
-                  : "Nessun token Instagram impostato. Crea il token nella Meta Business Suite e salvalo come secret INSTAGRAM_ACCESS_TOKEN sul Worker: dopo questa operazione il collegamento è attivo e il token si rinnova da solo."}
-              </p>
+              <>
+                <p className="community-rules-text">
+                  {stato.configured
+                    ? "Il token è presente ma Instagram non ha risposto. Rinnova il token o controlla che la pagina sia ancora collegata all'app."
+                    : "Nessun token Instagram impostato. Crea il token nella Meta Business Suite e salvalo come secret INSTAGRAM_ACCESS_TOKEN sul Worker: dopo questa operazione il collegamento è attivo e il token si rinnova da solo."}
+                </p>
+
+                {stato.configured && stato.errore && (
+                  <p className="instagram-feedback is-error">
+                    Instagram risponde: {stato.errore}
+                  </p>
+                )}
+              </>
             )}
 
             <div className="instagram-meta-grid">
@@ -235,6 +243,15 @@ function InstagramSettings({
                   {giorniRimanenti === null
                     ? "—"
                     : `${giorniRimanenti} giorni`}
+                </strong>
+              </div>
+
+              <div>
+                <span>Token letto da</span>
+                <strong>
+                  {stato.origineToken === "firestore"
+                    ? "rinnovo del Worker"
+                    : "secret Cloudflare"}
                 </strong>
               </div>
             </div>

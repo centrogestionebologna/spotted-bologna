@@ -1278,9 +1278,20 @@ async function informazioniAccountInstagram(token) {
   const dati = await risposta.json().catch(() => ({}));
 
   if (!risposta.ok || dati.error) {
-    throw new Error(
-      messaggioErroreInstagram(dati)
-    );
+    const errore = dati?.error || {};
+    const motivo =
+      errore.error_user_msg ||
+      errore.message ||
+      "Instagram non ha risposto al controllo del profilo.";
+    const codice = errore.code
+      ? ` (codice ${errore.code}${
+          errore.error_subcode
+            ? `/${errore.error_subcode}`
+            : ""
+        }, HTTP ${risposta.status})`
+      : ` (HTTP ${risposta.status})`;
+
+    throw new Error(`${motivo}${codice}`);
   }
 
   return {
@@ -6650,12 +6661,22 @@ if (
           scadeIl: configurazione?.scadeIl || null
         };
 
+        /*
+         * Il token rinnovato vive su Firestore e ha la precedenza sul
+         * secret: sapere quale dei due viene letto evita di cercare a
+         * lungo un errore che sta nel token piu' vecchio.
+         */
+        const origineToken = configurazione?.token
+          ? "firestore"
+          : "secret";
+
         if (!token) {
           return rispostaJson(
             {
               success: true,
               configured: false,
               account: null,
+              origineToken,
               ...datiConfigurazione
             },
             200,
@@ -6675,6 +6696,7 @@ if (
               success: true,
               configured: true,
               account,
+              origineToken,
               ...datiConfigurazione
             },
             200,
@@ -6692,6 +6714,7 @@ if (
               success: true,
               configured: true,
               account: null,
+              origineToken,
               errore:
                 erroreAccount.message ||
                 "Instagram non ha risposto.",
