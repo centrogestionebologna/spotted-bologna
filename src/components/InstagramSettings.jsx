@@ -219,6 +219,20 @@ function InstagramSettings({
                     Instagram risponde: {stato.errore}
                   </p>
                 )}
+
+                {stato.configured &&
+                  stato.tokenInfo &&
+                  (stato.tokenInfo.prefisso || "")
+                    .toUpperCase()
+                    .startsWith("EAA") && (
+                    <p className="instagram-feedback is-error">
+                      Il token salvato inizia con “EAA”: è un
+                      token Facebook. graph.instagram.com accetta
+                      solo i token Instagram che iniziano con
+                      “IGA” (Instagram → API setup with
+                      Instagram login → Genera token).
+                    </p>
+                  )}
               </>
             )}
 
@@ -254,6 +268,16 @@ function InstagramSettings({
                     : "secret Cloudflare"}
                 </strong>
               </div>
+
+              {stato.tokenInfo && (
+                <div>
+                  <span>Forma del token</span>
+                  <strong>
+                    {stato.tokenInfo.prefisso || "—"}… ·{" "}
+                    {stato.tokenInfo.lunghezza} caratteri
+                  </strong>
+                </div>
+              )}
             </div>
 
             {giorniRimanenti !== null &&

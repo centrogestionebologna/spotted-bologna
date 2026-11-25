@@ -6670,6 +6670,17 @@ if (
           ? "firestore"
           : "secret";
 
+        /*
+         * Un token Facebook (EAA...) incollato al posto di quello
+         * Instagram (IGA...) fa fallire graph.instagram.com con
+         * "Cannot parse access token": prefisso e lunghezza bastano a
+         * riconoscere l'errore senza mostrare il token.
+         */
+        const tokenInfo = {
+          prefisso: token.slice(0, 4),
+          lunghezza: token.length
+        };
+
         if (!token) {
           return rispostaJson(
             {
@@ -6677,6 +6688,7 @@ if (
               configured: false,
               account: null,
               origineToken,
+              tokenInfo,
               ...datiConfigurazione
             },
             200,
@@ -6697,6 +6709,7 @@ if (
               configured: true,
               account,
               origineToken,
+              tokenInfo,
               ...datiConfigurazione
             },
             200,
@@ -6715,6 +6728,7 @@ if (
               configured: true,
               account: null,
               origineToken,
+              tokenInfo,
               errore:
                 erroreAccount.message ||
                 "Instagram non ha risposto.",
