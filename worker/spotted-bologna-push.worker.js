@@ -8,14 +8,15 @@ const VERSIONE_API_INSTAGRAM = "v27.0";
 const GIORNI_PRIMA_DEL_RINNOVO = 40;
 
 /*
- * IA per i contenuti Instagram: endpoint OpenAI-compatibile, modello e
- * limite di bozze generate per richiesta. La chiave vive solo nei
- * secret del Worker.
+ * IA per i contenuti Instagram. La via predefinita e' gratuita: usa il
+ * binding Workers AI di Cloudflare (nessuna chiave, nessuna carta, solo
+ * l'allocazione giornaliera del piano Free). L'endpoint OpenAI-compatibile
+ * con chiave resta un'alternativa facoltativa.
  */
 const AI_CHAT_URL =
   "https://freebuff.com/api/v1/paid/chat/completions";
 const AI_MODELLO_PREDEFINITO =
-  "deepseek/deepseek-v4-flash";
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const MASSIMO_BOZZE_PER_RICHIESTA = 5;
 
 /*
@@ -1708,11 +1709,16 @@ async function generaBozzeInstagram({
   accessToken,
   quantita
 }) {
+  /*
+   * Con il binding `AI` la generazione e' gratuita; la chiave esterna
+   * serve solo se il binding non c'e'.
+   */
+  const usaWorkersAi = Boolean(env.AI);
   const apiKey = env.OPENAI_API_KEY || "";
 
-  if (!apiKey) {
+  if (!usaWorkersAi && !apiKey) {
     const errore = new Error(
-      "IA non configurata: aggiungi la chiave OPENAI_API_KEY nei secret del Worker."
+      "IA non configurata: aggiungi al Worker il binding Workers AI con nome AI (gratuito, nessuna chiave) e riprova."
     );
 
     errore.status = 503;
@@ -1778,17 +1784,13 @@ async function generaBozzeInstagram({
     'Rispondi SOLO con JSON valido in questa forma: {"bozze":[{"testo":"testo della card","caption":"descrizione con hashtag"}]}'
   ].join("\n\n");
 
-  const risposta = await fetch(
-    env.AI_CHAT_URL || AI_CHAT_URL,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: modello,
-        temperature: 0.8,
+  let contenuto = "";
+
+  if (usaWorkersAi) {
+    let risultato;
+
+    try {
+      risultato = await env.AI.run(modello, {
         messages: [
           {
             role: "system",
@@ -1799,34 +1801,81 @@ async function generaBozzeInstagram({
             content: messaggioUtente
           }
         ],
+        temperature: 0.8,
+        max_tokens: 2048,
         response_format: {
           type: "json_object"
         }
-      })
+      });
+    } catch (erroreWorkersAi) {
+      console.error(
+        "Workers AI ha rifiutato la generazione:",
+        erroreWorkersAi
+      );
+
+      const errore = new Error(
+        "Workers AI non ha risposto. Se le richieste gratuite di oggi sono finite, riprova dopo le 2 di notte (il limite si azzera a mezzanotte UTC)."
+      );
+
+      errore.status = 502;
+      throw errore;
     }
-  );
 
-  const risultato = await risposta
-    .json()
-    .catch(() => ({}));
-
-  if (!risposta.ok) {
-    console.error(
-      "IA ha rifiutato la generazione:",
-      risultato
+    contenuto =
+      typeof risultato === "string"
+        ? risultato
+        : risultato?.response || "";
+  } else {
+    const risposta = await fetch(
+      env.AI_CHAT_URL || AI_CHAT_URL,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: modello,
+          temperature: 0.8,
+          messages: [
+            {
+              role: "system",
+              content: messaggioSistema
+            },
+            {
+              role: "user",
+              content: messaggioUtente
+            }
+          ],
+          response_format: {
+            type: "json_object"
+          }
+        })
+      }
     );
 
-    const errore = new Error(
-      risultato?.error?.message ||
-        "L'IA non ha risposto. Riprova tra poco."
-    );
+    const risultato = await risposta
+      .json()
+      .catch(() => ({}));
 
-    errore.status = 502;
-    throw errore;
+    if (!risposta.ok) {
+      console.error(
+        "IA ha rifiutato la generazione:",
+        risultato
+      );
+
+      const errore = new Error(
+        risultato?.error?.message ||
+          "L'IA non ha risposto. Riprova tra poco."
+      );
+
+      errore.status = 502;
+      throw errore;
+    }
+
+    contenuto =
+      risultato?.choices?.[0]?.message?.content || "";
   }
-
-  const contenuto =
-    risultato?.choices?.[0]?.message?.content || "";
 
   const bozze = estraiBozze(
     contenuto,
@@ -7058,8 +7107,9 @@ if (
           {
             success: true,
             configured: Boolean(
-              env.OPENAI_API_KEY
+              env.AI || env.OPENAI_API_KEY
             ),
+            gratuito: Boolean(env.AI),
             modello:
               env.AI_MODEL ||
               AI_MODELLO_PREDEFINITO,

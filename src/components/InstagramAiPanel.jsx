@@ -246,7 +246,7 @@ function InstagramAiPanel() {
               ? "verifico…"
               : dati?.configured
                 ? "attiva"
-                : "manca la chiave"}
+                : "da attivare"}
           </span>
         </div>
 
@@ -260,8 +260,12 @@ function InstagramAiPanel() {
           <>
             <p className="community-rules-text">
               {dati.configured
-                ? `Modello ${dati.modello}. Le bozze vengono salvate e restano ferme finché non premi “Approva e pubblica”: nessun contenuto arriva su Instagram da solo.`
-                : "Per attivare l'IA serve la chiave del modello salvata come secret OPENAI_API_KEY sul Worker. Senza chiave puoi comunque usare le skill manualmente."}
+                ? `Modello ${dati.modello}${
+                    dati.gratuito
+                      ? " su Workers AI, senza costi aggiuntivi"
+                      : ""
+                  }. Le bozze vengono salvate e restano ferme finché non premi “Approva e pubblica”: nessun contenuto arriva su Instagram da solo.`
+                : "L'IA non è ancora attiva: nel Worker aggiungi un binding Workers AI con nome AI (Cloudflare lo include gratis, senza carta né chiavi). Poi ricarica questa pagina."}
             </p>
 
             <div className="instagram-ai-controls">
