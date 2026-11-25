@@ -1,5 +1,6 @@
 import { useState } from "react";
 import CommentSection from "./CommentSection";
+import GroupChat from "./GroupChat";
 import { scaricaImmagineSpotted } from "../utils/immagineSpotted";
 
 const linkValido = (link) => /^https?:\/\//i.test(link || "");
@@ -45,8 +46,10 @@ function Post({
   followRequestInProgress,
   showDownloadImage = false,
   utenti = [],
+  nickname = "",
 }) {
   const [showLikes, setShowLikes] = useState(false);
+  const [chatAperta, setChatAperta] = useState(false);
 
   /*
    * Solo gli admin vedono chi ha scritto lo spotted e chi lo ha
@@ -61,6 +64,8 @@ function Post({
     : [];
 
   const isGroupProposal = post.type === "groupProposal";
+  const gruppoInterno =
+    isGroupProposal && post.groupKind === "interno";
   const isQuestionAnswer =
     post.type === "questionAnswer" ||
     Boolean(post.questionText);
@@ -161,7 +166,10 @@ const seguePost =
 
       {isGroupProposal && (
         <h3 style={{ color: "#f5c542", marginBottom: "15px" }}>
-          📚 PROPOSTA GRUPPO
+          📚{" "}
+          {gruppoInterno && post.groupName
+            ? post.groupName
+            : "PROPOSTA GRUPPO"}
         </h3>
       )}
 
@@ -214,7 +222,9 @@ const seguePost =
 
           {!user && (
             <p style={{ color: "#ffcc00", fontWeight: "bold" }}>
-              🔒 Accedi per visualizzare il link
+              {gruppoInterno
+                ? "🔒 Accedi per aprire la chat del gruppo"
+                : "🔒 Accedi per visualizzare il link"}
             </p>
           )}
 
@@ -233,7 +243,11 @@ const seguePost =
 
               {!gruppoSbloccato && !scadutoSenzaTarget && (
                 <>
-                  <p style={{ color: "#ffcc00" }}>🔒 Link nascosto</p>
+                  <p style={{ color: "#ffcc00" }}>
+                    {gruppoInterno
+                      ? "🔒 Chat nascosta"
+                      : "🔒 Link nascosto"}
+                  </p>
                   <p style={{ color: "#999" }}>
                     Servono ancora {likesMancanti} like per sbloccare il gruppo.
                   </p>
@@ -245,14 +259,24 @@ const seguePost =
                   <p style={{ color: "#4caf50", fontWeight: "bold" }}>
                     ✅ Gruppo sbloccato
                   </p>
-                  {linkValido(post.groupLink) && (
-                    <a
-                      href={post.groupLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                  {gruppoInterno ? (
+                    <button
+                      type="button"
+                      className="group-chat-open"
+                      onClick={() => setChatAperta(true)}
                     >
-                      🔗 Apri gruppo
-                    </a>
+                      💬 Apri chat del gruppo
+                    </button>
+                  ) : (
+                    linkValido(post.groupLink) && (
+                      <a
+                        href={post.groupLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        🔗 Apri gruppo
+                      </a>
+                    )
                   )}
                 </>
               )}
@@ -379,6 +403,23 @@ const seguePost =
           likes={likes}
           toggleLike={toggleLike}
           segnalaPost={segnalaPost}
+        />
+      )}
+
+      {/* Chat interna dei gruppi creati sulla piattaforma */}
+      {user &&
+        gruppoInterno &&
+        gruppoSbloccato &&
+        !scadutoDopoSblocco &&
+        chatAperta && (
+        <GroupChat
+          group={{
+            id: post.id,
+            name: post.groupName || "Gruppo"
+          }}
+          user={user}
+          nickname={nickname}
+          onClose={() => setChatAperta(false)}
         />
       )}
     </div>

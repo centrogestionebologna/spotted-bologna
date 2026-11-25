@@ -577,6 +577,20 @@ const [
   setPropostaLink
 ] = useState("");
 
+/*
+ * Le proposte gruppo possono avere un link esterno oppure essere
+ * gruppi interni, con la chat che si apre in un popup.
+ */
+const [
+  propostaTipo,
+  setPropostaTipo
+] = useState("link");
+
+const [
+  propostaNomeGruppo,
+  setPropostaNomeGruppo
+] = useState("");
+
 const [
   propostaTargetLike,
   setPropostaTargetLike
@@ -2004,17 +2018,29 @@ const inviaPropostaGruppo = async () => {
   const linkPulito =
     propostaLink.trim();
 
+  const vuoleChatInterna =
+    propostaTipo === "interno";
+
+  const nomePulito =
+    propostaNomeGruppo.trim();
+
   if (!descrizionePulita) {
     alert("Inserisci una descrizione.");
     return;
   }
 
-  if (!linkPulito) {
+  if (vuoleChatInterna && !nomePulito) {
+    alert("Inserisci il nome del gruppo.");
+    return;
+  }
+
+  if (!vuoleChatInterna && !linkPulito) {
     alert("Inserisci un link.");
     return;
   }
 
   if (
+    !vuoleChatInterna &&
     !/^https?:\/\/.+/i.test(linkPulito)
   ) {
     alert(
@@ -2044,8 +2070,16 @@ const inviaPropostaGruppo = async () => {
 
   const nuovaProposta = {
     type: "groupProposal",
+    groupKind: vuoleChatInterna
+      ? "interno"
+      : "link",
+    groupName: vuoleChatInterna
+      ? nomePulito
+      : "",
     text: descrizionePulita,
-    groupLink: linkPulito,
+    groupLink: vuoleChatInterna
+      ? ""
+      : linkPulito,
     requiredLikes: Math.max(
       1,
       Number(propostaTargetLike) || 10
@@ -2111,6 +2145,8 @@ const inviaPropostaGruppo = async () => {
 
     setPropostaDescrizione("");
     setPropostaLink("");
+    setPropostaTipo("link");
+    setPropostaNomeGruppo("");
     setPropostaTargetLike(10);
     setMostraPropostaGruppo(false);
   } catch (errore) {
@@ -4621,9 +4657,46 @@ return (
     <div className="pannello-corpo">
 
   <p>
-    Descrivi bene il gruppo.
-    Non saranno disponibili commenti.
+    Puoi proporre un gruppo con un link esterno oppure
+    un gruppo interno a Spotted Bologna, con la chat che
+    si apre in un popup. Non saranno disponibili commenti.
   </p>
+
+  <div className="proposta-tipo">
+    <button
+      type="button"
+      className={
+        propostaTipo === "link" ? "attivo" : ""
+      }
+      onClick={() => setPropostaTipo("link")}
+    >
+      🔗 Link esterno
+    </button>
+
+    <button
+      type="button"
+      className={
+        propostaTipo === "interno" ? "attivo" : ""
+      }
+      onClick={() => setPropostaTipo("interno")}
+    >
+      💬 Gruppo interno
+    </button>
+  </div>
+
+  {propostaTipo === "interno" && (
+    <input
+      type="text"
+      maxLength={60}
+      value={propostaNomeGruppo}
+      onChange={(e) =>
+        setPropostaNomeGruppo(
+          e.target.value
+        )
+      }
+      placeholder="Nome del gruppo"
+    />
+  )}
 
   <textarea
     rows="5"
@@ -4636,16 +4709,25 @@ return (
     placeholder="Descrivi il gruppo..."
   />
 
-  <input
-    type="text"
-    value={propostaLink}
-    onChange={(e) =>
-      setPropostaLink(
-        e.target.value
-      )
-    }
-    placeholder="Link WhatsApp, Telegram o Instagram"
-  />
+  {propostaTipo === "link" && (
+    <input
+      type="text"
+      value={propostaLink}
+      onChange={(e) =>
+        setPropostaLink(
+          e.target.value
+        )
+      }
+      placeholder="Link WhatsApp, Telegram o Instagram"
+    />
+  )}
+
+  {propostaTipo === "interno" && (
+    <p style={{ color: "#999", fontSize: "14px" }}>
+      Il gruppo avrà una chat interna, solo testo ed emoji,
+      che si apre dopo il numero di like scelto.
+    </p>
+  )}
 
 <label
   style={{
@@ -4656,7 +4738,10 @@ return (
     fontWeight: "bold"
   }}
 >
-  ❤️ Numero di like necessari per rendere disponibile il link
+  ❤️ Numero di like necessari per{" "}
+  {propostaTipo === "interno"
+    ? "aprire la chat"
+    : "rendere disponibile il link"}
 </label>
 
 <p
@@ -4665,7 +4750,10 @@ return (
     fontSize: "14px"
   }}
 >
-  Il link resterà nascosto fino al raggiungimento di questo numero di like.
+  {propostaTipo === "interno"
+    ? "Il gruppo resterà nascosto"
+    : "Il link resterà nascosto"}{" "}
+  fino al raggiungimento di questo numero di like.
 </p>
 
 <input
@@ -5306,6 +5394,7 @@ setRicercaSpotted(e.target.value)
     toggleFollowPost={toggleFollowPost}
     followRequestInProgress={followRequestInProgress}
     utenti={utenti}
+    nickname={savedNickname}
   />
   )
 )}

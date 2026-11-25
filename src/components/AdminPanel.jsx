@@ -308,24 +308,33 @@ function AdminPanel({
 
             {post.type === "groupProposal" && (
               <>
-                <p className="admin-pending-meta">
-                  <strong>🔗 Link gruppo:</strong>
-                  <br />
-                  {linkValido(post.groupLink) ? (
-                    <a
-                      className="admin-pending-link"
-                      href={post.groupLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {post.groupLink}
-                    </a>
-                  ) : (
-                    <span className="admin-pending-invalid-link">
-                      Link non valido: {post.groupLink}
-                    </span>
-                  )}
-                </p>
+                {post.groupKind === "interno" ? (
+                  <p className="admin-pending-meta">
+                    <strong>💬 Gruppo interno:</strong>
+                    <br />
+                    {post.groupName || "Senza nome"} — chat
+                    nella piattaforma
+                  </p>
+                ) : (
+                  <p className="admin-pending-meta">
+                    <strong>🔗 Link gruppo:</strong>
+                    <br />
+                    {linkValido(post.groupLink) ? (
+                      <a
+                        className="admin-pending-link"
+                        href={post.groupLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {post.groupLink}
+                      </a>
+                    ) : (
+                      <span className="admin-pending-invalid-link">
+                        Link non valido: {post.groupLink}
+                      </span>
+                    )}
+                  </p>
+                )}
 
                 <p className="admin-pending-meta">
                   <strong>❤️ Like richiesti:</strong>{" "}
