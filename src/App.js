@@ -562,6 +562,21 @@ const [
   setApprovalEnabledGroups
 ] = useState(true);
 
+/*
+ * Instagram: con la pubblicazione automatica attiva l'admin deve
+ * solo approvare lo spotted, mentre gli hashtag aggiuntivi vengono
+ * uniti a quelli fissi nella descrizione.
+ */
+const [
+  instagramAutoPublish,
+  setInstagramAutoPublish
+] = useState(true);
+
+const [
+  instagramHashtags,
+  setInstagramHashtags
+] = useState("");
+
 const [
   mostraPropostaGruppo,
   setMostraPropostaGruppo
@@ -984,6 +999,14 @@ const caricaImpostazioni = async () => {
 
   setApprovalEnabledGroups(
     snap.data().approvalEnabledGroups ?? true
+  );
+
+  setInstagramAutoPublish(
+    snap.data().instagramAutoPublish ?? true
+  );
+
+  setInstagramHashtags(
+    snap.data().instagramHashtags || ""
   );
 
 }
@@ -2947,6 +2970,42 @@ async () => {
   setApprovalEnabledGroups(
     !approvalEnabledGroups
   );
+
+};
+
+const toggleInstagramAutoPublish =
+async () => {
+
+  await updateDoc(
+    doc(db, "settings", "general"),
+    {
+      instagramAutoPublish:
+        !instagramAutoPublish
+    }
+  );
+
+  setInstagramAutoPublish(
+    !instagramAutoPublish
+  );
+
+};
+
+const salvaInstagramHashtags = async (
+  valore
+) => {
+
+  const hashtags = String(
+    valore || ""
+  ).trim();
+
+  await updateDoc(
+    doc(db, "settings", "general"),
+    {
+      instagramHashtags: hashtags
+    }
+  );
+
+  setInstagramHashtags(hashtags);
 
 };
 
@@ -4955,6 +5014,8 @@ return (
     pubblicaInstagram={
       pubblicaSpottedAncheSuInstagram
     }
+    instagramAuto={instagramAutoPublish}
+    instagramHashtags={instagramHashtags}
     utenti={utenti}
   />
 
@@ -4998,6 +5059,14 @@ return (
     descriviNewsletter={descriviNewsletter}
     descriviSiNo={descriviSiNo}
     altriDatiUtente={altriDatiUtente}
+    instagramAutoPublish={instagramAutoPublish}
+    toggleInstagramAutoPublish={
+      toggleInstagramAutoPublish
+    }
+    instagramHashtags={instagramHashtags}
+    salvaInstagramHashtags={
+      salvaInstagramHashtags
+    }
   />
 
 </details>

@@ -8,6 +8,118 @@ const VERSIONE_API_INSTAGRAM = "v27.0";
 const GIORNI_PRIMA_DEL_RINNOVO = 40;
 
 /*
+ * IA per i contenuti Instagram: endpoint OpenAI-compatibile, modello e
+ * limite di bozze generate per richiesta. La chiave vive solo nei
+ * secret del Worker.
+ */
+const AI_CHAT_URL =
+  "https://freebuff.com/api/v1/paid/chat/completions";
+const AI_MODELLO_PREDEFINITO = "gpt-4o-mini";
+const MASSIMO_BOZZE_PER_RICHIESTA = 5;
+
+/*
+ * Le skill sono le istruzioni di scrittura che l'IA deve seguire: sono
+ * le stesse SKILL.md fornite dall'admin, riportate qui perche' il
+ * Worker non legge file. Dal pannello si possono attivare o spegnere.
+ */
+const SKILL_INSTAGRAM = [
+  {
+    id: "ig-viral",
+    nome: "Ricerca contenuti virali",
+    descrizione:
+      "Trova cosa funziona adesso nel settore, con rapporti di performance rispetto alla media dell'account.",
+    attivaPredefinita: true,
+    istruzioni:
+      "Studia un piccolo campione di account diretti, adiacenti e piu' grandi. Le views da sole non bastano: usa il multiplo rispetto alla mediana recente dell'account (sopra 3x segnale forte, sotto 1.5x quasi normale). Per ogni esempio annota account, dimensione pubblico, mediana, views, hook, primo testo, durata, CTA e fonte. Riporta formule ricorrenti, differenze tra vincenti e baseline e 3 direzioni originali. Non copiare script altrui."
+  },
+  {
+    id: "ig-plan",
+    nome: "Piano settimanale",
+    descrizione:
+      "Costruisce un calendario di una settimana con pilastri, formati e obiettivi.",
+    attivaPredefinita: true,
+    istruzioni:
+      "Pianifica sulla capacita' reale di produzione. Scegli 3-5 pilastri di contenuto e assegna a ogni post un obiettivo: reach, fiducia, prova, conversazione o conversione. Per ogni voce indica giorno, formato, tema, hook, prova necessaria, CTA e possibilita' di riuso. Non inventare orari di pubblicazione ottimali."
+  },
+  {
+    id: "ig-repurpose",
+    nome: "Riuso di contenuti lunghi",
+    descrizione:
+      "Trasforma un contenuto lungo in piu' contenuti autonomi per la settimana.",
+    attivaPredefinita: true,
+    istruzioni:
+      "Estrai idee distinte, non pezzi tagliati. Ogni contenuto deve reggersi da solo per chi non ha visto la fonte. Conserva fatti e citazioni, non inventare esempi. Varia hook e angoli per non sembrare ripetitivo."
+  },
+  {
+    id: "ig-caption",
+    nome: "Descrizione del post",
+    descrizione:
+      "Scrive la caption: primi 125 caratteri utili, apertura concreta, un solo invito.",
+    attivaPredefinita: true,
+    istruzioni:
+      "Scrivi caption che guadagnano il tap. I primi 125 caratteri devono funzionare da soli. Apri con una riga concreta, mai con 'nuovo post' o 'sono felice di condividere'. Usa la voce dell'utente, conserva i fatti, non inventare numeri. Preferisci termini di ricerca naturali dentro le frasi. Un solo invito all'azione. Hashtag contenuti."
+  },
+  {
+    id: "ig-human",
+    nome: "Scrittura naturale",
+    descrizione:
+      "Toglie il tono artificiale e le frasi fatte, senza cambiare i fatti.",
+    attivaPredefinita: true,
+    istruzioni:
+      "Conserva fatti, nomi, numeri e significato. Elimina caratteri Unicode invisibili, frasi fatte, simmetria eccessiva, enfasi finta e linguaggio da 'creator'. Niente trattini lunghi inutili. Obiettivo: testo naturale, scritto come si parla. Non promettere di aggirare rilevatori."
+  },
+  {
+    id: "ig-carousel",
+    nome: "Carosello",
+    descrizione:
+      "Trasforma un'idea in un carosello da 5-10 slide. Al momento non pubblicabile dall'app.",
+    attivaPredefinita: false,
+    istruzioni:
+      "5-10 slide. La prima e' una promessa, non un titolo. La seconda deve premiare subito lo swipe. Ogni slide si capisce a colpo d'occhio e fa un passo avanti. Per ogni slide: titolo, testo, direzione visiva. Testo minimo per il telefono. Chiudi con un solo invito."
+  },
+  {
+    id: "ig-reel",
+    nome: "Reel",
+    descrizione:
+      "Scrive un Reel con tre hook, script parlato e tempi. Richiede video per la pubblicazione.",
+    attivaPredefinita: false,
+    istruzioni:
+      "Parti da un'idea vera e specifica. Scrivi tre hook davvero diversi tra loro, con hook parlato e hook a schermo (max sei parole), poi valuta ciascuno 0-100 su lunghezza, specificita', posta in gioco, front-loading e indirizzo al pubblico. Script: hook 0-2s, contesto 2-7s, un'idea per battuta, ultimi 3s payoff e un solo invito. 15-45 secondi, linguaggio parlato."
+  },
+  {
+    id: "ig-story",
+    nome: "Storie",
+    descrizione:
+      "Pianifica una sequenza di Storie con sticker usati solo se servono.",
+    attivaPredefinita: false,
+    istruzioni:
+      "3-7 frame. Il primo cattura l'attenzione, quelli centrali aggiungono contesto o prova, l'ultimo chiede una sola azione. Usa sticker solo con un compito preciso: sondaggio per partecipare, domanda per ricerca, quiz per interazione, link per l'azione. Niente funnel in DM senza consenso."
+  },
+  {
+    id: "ig-profile",
+    nome: "Audit del profilo",
+    descrizione:
+      "Valuta nome, bio, CTA, in evidenza e post fissati del profilo.",
+    attivaPredefinita: false,
+    istruzioni:
+      "Valuta su 100: chiarezza identita', specificita' del pubblico, proposta di valore, prova, ricercabilita', CTA, chiarezza del link, coerenza visiva, post fissati, in evidenza, fiducia e attrito. Se mancano informazioni segna 'sconosciuto' invece di indovinare. Restituisci priorita' di intervento e 2-3 bio alternative."
+  },
+  {
+    id: "ig-audit",
+    nome: "Analisi dei risultati",
+    descrizione:
+      "Legge i risultati reali dei post pubblicati e dice cosa ripetere, testare o fermare.",
+    attivaPredefinita: false,
+    istruzioni:
+      "Usa dati reali. Normalizza: views e reach rispetto alla baseline dell'account, salvataggi e condivisioni per reach, follow per reach, retention per i video. Non confrontare views grezze tra account diversi. Per ogni post identifica hook, promessa, formato, prova, ritmo, CTA e risultato. Separa evidenza e ipotesi. Chiudi con ripeti, testa, ferma e un prossimo esperimento."
+  }
+];
+
+const SKILL_ATTIVE_PREDEFINITE = SKILL_INSTAGRAM
+  .filter((skill) => skill.attivaPredefinita)
+  .map((skill) => skill.id);
+
+/*
  * Converte una stringa o un ArrayBuffer nel formato Base64 URL-safe
  * richiesto dai JWT.
  */
@@ -274,6 +386,23 @@ function valoreFirestore(campo) {
   }
 
   return null;
+}
+
+/*
+ * Legge un campo Firestore di tipo array di stringhe.
+ */
+function listaFirestore(campo) {
+  const valori = campo?.arrayValue?.values;
+
+  if (!Array.isArray(valori)) {
+    return null;
+  }
+
+  return valori
+    .map(valoreFirestore)
+    .filter(
+      (valore) => typeof valore === "string"
+    );
 }
 
 /*
@@ -831,6 +960,47 @@ async function leggiDocumentoConServiceAccount({
 }
 
 /*
+ * Crea un documento Firestore con un ID generato da Firestore.
+ */
+async function creaDocumentoConServiceAccount({
+  env,
+  accessToken,
+  collectionId,
+  fields
+}) {
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents/${collectionId}`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ fields })
+  });
+
+  const risultato = await risposta
+    .json()
+    .catch(() => null);
+
+  if (!risposta.ok) {
+    console.error(
+      "Errore creazione documento Firestore:",
+      risultato
+    );
+
+    throw new Error(
+      "Impossibile creare il documento su Firestore."
+    );
+  }
+
+  return risultato;
+}
+
+/*
  * Scrive o aggiorna un documento Firestore con il service account.
  */
 async function scriviDocumentoConServiceAccount({
@@ -905,6 +1075,12 @@ async function leggiConfigurazioneInstagram({
       ),
       rinnovatoIl: valoreFirestore(
         documento.fields?.rinnovatoIl
+      ),
+      scadeIl: valoreFirestore(
+        documento.fields?.scadeIl
+      ),
+      aiSkills: listaFirestore(
+        documento.fields?.aiSkills
       )
     };
   } catch (errore) {
@@ -939,7 +1115,10 @@ async function tokenInstagram({ env, accessToken }) {
  * Il token di Instagram dura 60 giorni: il cron lo rinnova prima della
  * scadenza, altrimenti la pubblicazione si fermerebbe in silenzio.
  */
-async function rinnovaTokenInstagramSeNecessario(env) {
+async function rinnovaTokenInstagramSeNecessario(
+  env,
+  { forza = false } = {}
+) {
   try {
     const serviceAccount = JSON.parse(
       env.FIREBASE_SERVICE_ACCOUNT
@@ -960,7 +1139,11 @@ async function rinnovaTokenInstagramSeNecessario(env) {
       "";
 
     if (!tokenAttuale) {
-      return null;
+      return {
+        token: "",
+        rinnovato: false,
+        errore: "Token Instagram non configurato."
+      };
     }
 
     const rinnovatoIl = configurazione?.rinnovatoIl
@@ -968,12 +1151,16 @@ async function rinnovaTokenInstagramSeNecessario(env) {
       : 0;
 
     if (
+      !forza &&
       Number.isFinite(rinnovatoIl) &&
       rinnovatoIl > 0 &&
       Date.now() - rinnovatoIl <
         GIORNI_PRIMA_DEL_RINNOVO * 86400000
     ) {
-      return tokenAttuale;
+      return {
+        token: tokenAttuale,
+        rinnovato: false
+      };
     }
 
     const risposta = await fetch(
@@ -995,7 +1182,11 @@ async function rinnovaTokenInstagramSeNecessario(env) {
         risultato
       );
 
-      return tokenAttuale;
+      return {
+        token: tokenAttuale,
+        rinnovato: false,
+        errore: messaggioErroreInstagram(risultato)
+      };
     }
 
     await scriviDocumentoConServiceAccount({
@@ -1025,14 +1216,23 @@ async function rinnovaTokenInstagramSeNecessario(env) {
       }
     });
 
-    return risultato.access_token;
+    return {
+      token: risultato.access_token,
+      rinnovato: true
+    };
   } catch (errore) {
     console.error(
       "Errore rinnovo token Instagram:",
       errore
     );
 
-    return null;
+    return {
+      token: "",
+      rinnovato: false,
+      errore:
+        errore.message ||
+        "Errore durante il rinnovo del token Instagram."
+    };
   }
 }
 
@@ -1062,9 +1262,135 @@ function messaggioErroreInstagram(risultato) {
 }
 
 /*
+ * Dati del profilo collegato: servono al pannello per far vedere
+ * quale pagina Instagram sta ricevendo gli spotted.
+ */
+async function informazioniAccountInstagram(token) {
+  const risposta = await fetch(
+    `https://graph.instagram.com/` +
+      `${VERSIONE_API_INSTAGRAM}/me` +
+      `?fields=username,account_type,media_count` +
+      `&access_token=${encodeURIComponent(token)}`
+  );
+
+  const dati = await risposta.json().catch(() => ({}));
+
+  if (!risposta.ok || dati.error) {
+    throw new Error(
+      messaggioErroreInstagram(dati)
+    );
+  }
+
+  return {
+    username: dati.username || "",
+    accountType: dati.account_type || "",
+    mediaCount: Number(dati.media_count) || 0
+  };
+}
+
+/*
  * Pubblica lo spotted su Instagram: salva la card, la espone a un URL
  * pubblico (Instagram scarica l'immagine da li') e chiama media +
  * media_publish.
+ */
+async function pubblicaImmagineSuInstagram({
+  token,
+  imageUrl,
+  caption
+}) {
+  const creazione = await fetch(
+    `https://graph.instagram.com/` +
+      `${VERSIONE_API_INSTAGRAM}/me/media`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        image_url: imageUrl,
+        caption,
+        access_token: token
+      })
+    }
+  );
+
+  const contenitore = await creazione
+    .json()
+    .catch(() => ({}));
+
+  if (!creazione.ok || !contenitore.id) {
+    console.error(
+      "Instagram ha rifiutato il contenitore:",
+      contenitore
+    );
+
+    throw new Error(
+      messaggioErroreInstagram(contenitore)
+    );
+  }
+
+  const pubblicazione = await fetch(
+    `https://graph.instagram.com/` +
+      `${VERSIONE_API_INSTAGRAM}/me/media_publish`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        creation_id: contenitore.id,
+        access_token: token
+      })
+    }
+  );
+
+  const pubblicato = await pubblicazione
+    .json()
+    .catch(() => ({}));
+
+  if (!pubblicazione.ok || !pubblicato.id) {
+    console.error(
+      "Instagram non ha pubblicato il contenitore:",
+      pubblicato
+    );
+
+    throw new Error(
+      messaggioErroreInstagram(pubblicato)
+    );
+  }
+
+  let permalink = "";
+
+  try {
+    const informazioni = await fetch(
+      `https://graph.instagram.com/` +
+        `${VERSIONE_API_INSTAGRAM}/` +
+        `${encodeURIComponent(pubblicato.id)}` +
+        `?fields=permalink` +
+        `&access_token=${encodeURIComponent(token)}`
+    );
+
+    const dati = await informazioni
+      .json()
+      .catch(() => ({}));
+
+    permalink = dati.permalink || "";
+  } catch (errore) {
+    console.warn(
+      "Permalink Instagram non recuperato:",
+      errore
+    );
+  }
+
+  return {
+    mediaId: pubblicato.id,
+    permalink
+  };
+}
+
+/*
+ * Pubblica lo spotted su Instagram usando la card gia' disegnata e
+ * salvata dal pannello.
  */
 async function pubblicaSuInstagram({
   env,
@@ -1166,85 +1492,15 @@ async function pubblicaSuInstagram({
   const imageUrl =
     `${origin}/media/${encodeURIComponent(postId)}.jpg`;
 
-  const creazione = await fetch(
-    `https://graph.instagram.com/` +
-      `${VERSIONE_API_INSTAGRAM}/me/media`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        caption,
-        access_token: token
-      })
-    }
-  );
-
-  const contenitore = await creazione.json();
-
-  if (!creazione.ok || !contenitore.id) {
-    console.error(
-      "Instagram ha rifiutato il contenitore:",
-      contenitore
-    );
-
-    throw new Error(
-      messaggioErroreInstagram(contenitore)
-    );
-  }
-
-  const pubblicazione = await fetch(
-    `https://graph.instagram.com/` +
-      `${VERSIONE_API_INSTAGRAM}/me/media_publish`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        creation_id: contenitore.id,
-        access_token: token
-      })
-    }
-  );
-
-  const pubblicato = await pubblicazione.json();
-
-  if (!pubblicazione.ok || !pubblicato.id) {
-    console.error(
-      "Instagram non ha pubblicato il contenitore:",
-      pubblicato
-    );
-
-    throw new Error(
-      messaggioErroreInstagram(pubblicato)
-    );
-  }
-
-  let permalink = "";
-
-  try {
-    const informazioni = await fetch(
-      `https://graph.instagram.com/` +
-        `${VERSIONE_API_INSTAGRAM}/` +
-        `${encodeURIComponent(pubblicato.id)}` +
-        `?fields=permalink` +
-        `&access_token=${encodeURIComponent(token)}`
-    );
-
-    const dati = await informazioni.json();
-    permalink = dati.permalink || "";
-  } catch (errore) {
-    console.warn(
-      "Permalink Instagram non recuperato:",
-      errore
-    );
-  }
+  const { mediaId, permalink } =
+    await pubblicaImmagineSuInstagram({
+      token,
+      imageUrl,
+      caption
+    });
 
   const datiInstagram = {
-    mediaId: pubblicato.id,
+    mediaId,
     permalink,
     caption,
     publishedAt: new Date().toISOString()
@@ -1282,6 +1538,360 @@ async function pubblicaSuInstagram({
     mediaId: datiInstagram.mediaId,
     permalink: datiInstagram.permalink,
     instagram: datiInstagram
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Instagram: bozze generate dall'IA
+ * ------------------------------------------------------------------ */
+
+/*
+ * Legge le bozze ancora da approvare. Una sola query senza filtri:
+ * cosi' non serve creare indici Firestore, il filtro e l'ordinamento
+ * li fa il Worker.
+ */
+async function elencaBozzeInstagram({
+  env,
+  accessToken
+}) {
+  const endpoint =
+    `https://firestore.googleapis.com/v1/projects/` +
+    `${env.FIREBASE_PROJECT_ID}/databases/(default)/` +
+    `documents:runQuery`;
+
+  const risposta = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [
+          {
+            collectionId: "instagramDrafts",
+            allDescendants: false
+          }
+        ],
+        limit: 50
+      }
+    })
+  });
+
+  const risultato = await risposta
+    .json()
+    .catch(() => null);
+
+  if (!risposta.ok || !Array.isArray(risultato)) {
+    console.error(
+      "Errore lettura bozze Instagram:",
+      risultato
+    );
+
+    return [];
+  }
+
+  return risultato
+    .filter((elemento) => elemento.document)
+    .map((elemento) => {
+      const fields = elemento.document.fields || {};
+
+      return {
+        id: elemento.document.name.split("/").pop(),
+        testo:
+          valoreFirestore(fields.testo) || "",
+        caption:
+          valoreFirestore(fields.caption) || "",
+        stato: valoreFirestore(fields.stato) || "",
+        fonte: valoreFirestore(fields.fonte) || "",
+        createdAt:
+          valoreFirestore(fields.createdAt) || "",
+        mediaId:
+          valoreFirestore(fields.mediaId) || "",
+        permalink:
+          valoreFirestore(fields.permalink) || "",
+        publishedAt:
+          valoreFirestore(fields.publishedAt) || ""
+      };
+    })
+    .filter((bozza) => bozza.stato === "bozza")
+    .sort((a, b) =>
+      String(b.createdAt).localeCompare(
+        String(a.createdAt)
+      )
+    )
+    .slice(0, 20);
+}
+
+/*
+ * Estrae le bozze dal testo restituito dal modello. I modelli a volte
+ * incapsulano il JSON tra backtick o aggiungono una frase: si prova il
+ * parse diretto e poi quello del primo oggetto JSON.
+ */
+function estraiBozze(contenuto, massimo) {
+  const pulito = String(contenuto || "")
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  let dati = null;
+
+  try {
+    dati = JSON.parse(pulito);
+  } catch {
+    const inizio = pulito.indexOf("{");
+    const fine = pulito.lastIndexOf("}");
+
+    if (inizio >= 0 && fine > inizio) {
+      try {
+        dati = JSON.parse(
+          pulito.slice(inizio, fine + 1)
+        );
+      } catch {
+        dati = null;
+      }
+    }
+  }
+
+  const elenco = Array.isArray(dati)
+    ? dati
+    : Array.isArray(dati?.bozze)
+      ? dati.bozze
+      : Array.isArray(dati?.posts)
+        ? dati.posts
+        : [];
+
+  const visti = new Set();
+  const bozze = [];
+
+  for (const voce of elenco) {
+    const testo = String(
+      voce?.testo || voce?.text || ""
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const caption = String(
+      voce?.caption || voce?.descrizione || ""
+    )
+      .replace(/\r/g, "")
+      .trim()
+      .slice(0, 2000);
+
+    if (testo.length < 20 || !caption) continue;
+
+    const chiave = testo.toLowerCase();
+
+    if (visti.has(chiave)) continue;
+
+    visti.add(chiave);
+
+    bozze.push({
+      testo: testo.slice(0, 280),
+      caption
+    });
+
+    if (bozze.length >= massimo) break;
+  }
+
+  return bozze;
+}
+
+/*
+ * Chiede all'IA nuovi contenuti per il profilo: legge gli ultimi
+ * spotted come riferimento di tono, applica le skill attive e salva le
+ * bozze in attesa di approvazione.
+ */
+async function generaBozzeInstagram({
+  env,
+  accessToken,
+  quantita
+}) {
+  const apiKey = env.OPENAI_API_KEY || "";
+
+  if (!apiKey) {
+    const errore = new Error(
+      "IA non configurata: aggiungi la chiave OPENAI_API_KEY nei secret del Worker."
+    );
+
+    errore.status = 503;
+    throw errore;
+  }
+
+  const modello =
+    env.AI_MODEL || AI_MODELLO_PREDEFINITO;
+
+  const configurazione =
+    await leggiConfigurazioneInstagram({
+      env,
+      accessToken
+    });
+
+  const attive =
+    configurazione?.aiSkills?.length
+      ? configurazione.aiSkills
+      : SKILL_ATTIVE_PREDEFINITE;
+
+  const skills = SKILL_INSTAGRAM.filter((skill) =>
+    attive.includes(skill.id)
+  );
+
+  const inizioISO = new Date(
+    Date.now() - 45 * 86400000
+  ).toISOString();
+
+  const recenti = await recuperaAnteprimePost({
+    env,
+    accessToken,
+    inizioISO,
+    limite: 40
+  });
+
+  const elencoRecenti =
+    recenti
+      .map(
+        (spotted, indice) =>
+          `${indice + 1}. ${spotted.text}`
+      )
+      .join("\n") || "Nessuno spotted recente.";
+
+  const istruzioniSkill = skills
+    .map(
+      (skill) =>
+        `### ${skill.nome}\n${skill.istruzioni}`
+    )
+    .join("\n\n");
+
+  const messaggioSistema = [
+    "Sei il social media editor di Spotted Bologna, la pagina Instagram degli spotted universitari e della vita bolognese.",
+    "Scrivi in italiano, con un tono naturale e diretto: come una persona che parla, non come un'agenzia.",
+    "Regole assolute:\n- Non inventare fatti, numeri, prezzi, nomi, citazioni o esperienze: niente dati attribuiti a persone o locali reali.\n- Niente pubblicita', link, contatti, offerte o inviti a scrivere in privato.\n- Non citare marchi o persone reali.\n- Il testo della card sta in 1-3 frasi brevi, massimo 280 caratteri, senza emoji.\n- La caption ha i primi 125 caratteri utili da soli, massimo 2 emoji e massimo 8 hashtag pertinenti.\n- Mai 'nuovo post', 'sono felice di condividere' o frasi generiche.\n- Un solo invito all'azione nella caption.",
+    `Skill attive da seguire:\n\n${istruzioniSkill}`
+  ].join("\n\n");
+
+  const messaggioUtente = [
+    `Proponi ${quantita} nuovi contenuti per un post immagine singolo del profilo.`, 
+    "Ogni contenuto deve essere autonomo, adatto a una card quadrata con testo grande e a un pubblico di studenti a Bologna.",
+    "Spunti non vincolanti dagli ultimi spotted (solo per tono e temi, non copiarli):",
+    elencoRecenti,
+    'Rispondi SOLO con JSON valido in questa forma: {"bozze":[{"testo":"testo della card","caption":"descrizione con hashtag"}]}'
+  ].join("\n\n");
+
+  const risposta = await fetch(
+    env.AI_CHAT_URL || AI_CHAT_URL,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: modello,
+        temperature: 0.8,
+        messages: [
+          {
+            role: "system",
+            content: messaggioSistema
+          },
+          {
+            role: "user",
+            content: messaggioUtente
+          }
+        ],
+        response_format: {
+          type: "json_object"
+        }
+      })
+    }
+  );
+
+  const risultato = await risposta
+    .json()
+    .catch(() => ({}));
+
+  if (!risposta.ok) {
+    console.error(
+      "IA ha rifiutato la generazione:",
+      risultato
+    );
+
+    const errore = new Error(
+      risultato?.error?.message ||
+        "L'IA non ha risposto. Riprova tra poco."
+    );
+
+    errore.status = 502;
+    throw errore;
+  }
+
+  const contenuto =
+    risultato?.choices?.[0]?.message?.content || "";
+
+  const bozze = estraiBozze(
+    contenuto,
+    quantita
+  );
+
+  if (bozze.length === 0) {
+    const errore = new Error(
+      "L'IA non ha restituito bozze valide. Riprova."
+    );
+
+    errore.status = 502;
+    throw errore;
+  }
+
+  const adesso = new Date().toISOString();
+  const create = [];
+
+  for (const bozza of bozze) {
+    const creato =
+      await creaDocumentoConServiceAccount({
+        env,
+        accessToken,
+        collectionId: "instagramDrafts",
+        fields: {
+          testo: {
+            stringValue: bozza.testo
+          },
+          caption: {
+            stringValue: bozza.caption
+          },
+          stato: {
+            stringValue: "bozza"
+          },
+          fonte: {
+            stringValue: "ai"
+          },
+          modello: {
+            stringValue: modello
+          },
+          skills: {
+            arrayValue: {
+              values: skills.map((skill) => ({
+                stringValue: skill.id
+              }))
+            }
+          },
+          createdAt: {
+            stringValue: adesso
+          }
+        }
+      });
+
+    create.push({
+      id: creato?.name?.split("/").pop() || "",
+      ...bozza,
+      stato: "bozza",
+      fonte: "ai",
+      createdAt: adesso
+    });
+  }
+
+  return {
+    modello,
+    skills: skills.map((skill) => skill.id),
+    bozze: create
   };
 }
 
@@ -5886,7 +6496,9 @@ if (
                 env.INSTAGRAM_ACCESS_TOKEN
             ),
             rinnovatoIl:
-              configurazione?.rinnovatoIl || null
+              configurazione?.rinnovatoIl || null,
+            scadeIl:
+              configurazione?.scadeIl || null
           },
           200,
           origin,
@@ -5904,6 +6516,284 @@ if (
             error:
               errore.message ||
               "Errore configurazione Instagram."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Dati del profilo Instagram collegato: username, tipo di account,
+     * numero di post e scadenza del token. Serve al pannello della
+     * dashboard per verificare il collegamento.
+     */
+    if (
+      request.method === "GET" &&
+      urlRichiesta.pathname === "/instagram/account"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono vedere il collegamento Instagram."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const configurazione =
+          await leggiConfigurazioneInstagram({
+            env,
+            accessToken
+          });
+
+        const token =
+          configurazione?.token ||
+          env.INSTAGRAM_ACCESS_TOKEN ||
+          "";
+
+        const datiConfigurazione = {
+          rinnovatoIl:
+            configurazione?.rinnovatoIl || null,
+          scadeIl: configurazione?.scadeIl || null
+        };
+
+        if (!token) {
+          return rispostaJson(
+            {
+              success: true,
+              configured: false,
+              account: null,
+              ...datiConfigurazione
+            },
+            200,
+            origin,
+            env
+          );
+        }
+
+        try {
+          const account =
+            await informazioniAccountInstagram(
+              token
+            );
+
+          return rispostaJson(
+            {
+              success: true,
+              configured: true,
+              account,
+              ...datiConfigurazione
+            },
+            200,
+            origin,
+            env
+          );
+        } catch (erroreAccount) {
+          console.error(
+            "Profilo Instagram non leggibile:",
+            erroreAccount
+          );
+
+          return rispostaJson(
+            {
+              success: true,
+              configured: true,
+              account: null,
+              errore:
+                erroreAccount.message ||
+                "Instagram non ha risposto.",
+              ...datiConfigurazione
+            },
+            200,
+            origin,
+            env
+          );
+        }
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/account:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore collegamento Instagram."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Rinnova subito il token Instagram: il cron lo fa gia' da solo
+     * prima della scadenza, ma dal pannello si puo' forzare il
+     * rinnovo quando Instagram segnala un problema.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname === "/instagram/refresh"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono rinnovare il token Instagram."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const rinnovo =
+          await rinnovaTokenInstagramSeNecessario(
+            env,
+            { forza: true }
+          );
+
+        if (!rinnovo?.token) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                rinnovo?.errore ||
+                "Token Instagram non configurato."
+            },
+            503,
+            origin,
+            env
+          );
+        }
+
+        if (rinnovo.errore) {
+          return rispostaJson(
+            {
+              success: false,
+              error: rinnovo.errore
+            },
+            502,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const configurazione =
+          await leggiConfigurazioneInstagram({
+            env,
+            accessToken
+          });
+
+        return rispostaJson(
+          {
+            success: true,
+            rinnovato: rinnovo.rinnovato,
+            rinnovatoIl:
+              configurazione?.rinnovatoIl || null,
+            scadeIl:
+              configurazione?.scadeIl || null
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/refresh:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante il rinnovo del token Instagram."
           },
           500,
           origin,
@@ -6089,6 +6979,816 @@ if (
               "Errore durante la pubblicazione su Instagram."
           },
           errore.status || 500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Stato dell'IA, catalogo delle skill e bozze in attesa.
+     */
+    if (
+      request.method === "GET" &&
+      urlRichiesta.pathname === "/instagram/ai"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono gestire l'IA di Instagram."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const configurazione =
+          await leggiConfigurazioneInstagram({
+            env,
+            accessToken
+          });
+
+        const attive =
+          configurazione?.aiSkills?.length
+            ? configurazione.aiSkills
+            : SKILL_ATTIVE_PREDEFINITE;
+
+        return rispostaJson(
+          {
+            success: true,
+            configured: Boolean(
+              env.OPENAI_API_KEY
+            ),
+            modello:
+              env.AI_MODEL ||
+              AI_MODELLO_PREDEFINITO,
+            skills: SKILL_INSTAGRAM.map(
+              (skill) => ({
+                id: skill.id,
+                nome: skill.nome,
+                descrizione: skill.descrizione,
+                istruzioni: skill.istruzioni,
+                attiva: attive.includes(skill.id)
+              })
+            ),
+            bozze: await elencaBozzeInstagram({
+              env,
+              accessToken
+            })
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/ai:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore lettura IA Instagram."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Attiva o spegne le skill usate per generare i contenuti.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/instagram/ai/skills"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono cambiare le skill."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const richieste = Array.isArray(
+          corpo.skills
+        )
+          ? corpo.skills
+          : null;
+
+        if (!richieste) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "skills deve essere un elenco di identificativi."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const valide = new Set(
+          SKILL_INSTAGRAM.map(
+            (skill) => skill.id
+          )
+        );
+
+        const scelte = Array.from(
+          new Set(
+            richieste
+              .map((voce) => String(voce))
+              .filter((voce) => valide.has(voce))
+          )
+        );
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        await scriviDocumentoConServiceAccount({
+          env,
+          accessToken,
+          percorso: "config/instagram",
+          campiAggiornati: [
+            "aiSkills",
+            "aiSkillsUpdatedAt"
+          ],
+          fields: {
+            aiSkills: {
+              arrayValue: {
+                values: scelte.map((id) => ({
+                  stringValue: id
+                }))
+              }
+            },
+            aiSkillsUpdatedAt: {
+              stringValue:
+                new Date().toISOString()
+            }
+          }
+        });
+
+        return rispostaJson(
+          {
+            success: true,
+            skills: SKILL_INSTAGRAM.map(
+              (skill) => ({
+                id: skill.id,
+                nome: skill.nome,
+                descrizione: skill.descrizione,
+                istruzioni: skill.istruzioni,
+                attiva: scelte.includes(skill.id)
+              })
+            )
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/ai/skills:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore salvataggio skill."
+          },
+          500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Genera nuove bozze con l'IA (solo admin).
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/instagram/ai/generate"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono generare contenuti."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const quantita = Math.min(
+          MASSIMO_BOZZE_PER_RICHIESTA,
+          Math.max(
+            1,
+            Number(corpo.quantita) || 3
+          )
+        );
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const risultato =
+          await generaBozzeInstagram({
+            env,
+            accessToken,
+            quantita
+          });
+
+        return rispostaJson(
+          {
+            success: true,
+            ...risultato
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/ai/generate:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante la generazione."
+          },
+          errore.status || 500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Approva una bozza: pubblica la card su Instagram e segna la
+     * bozza come pubblicata.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/instagram/drafts/publish"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono pubblicare una bozza."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const draftId = String(
+          corpo.draftId || ""
+        ).trim();
+
+        const caption = String(
+          corpo.caption || ""
+        ).slice(0, 2200);
+
+        const immagineBase64 = String(
+          corpo.imageBase64 || ""
+        )
+          .replace(/^data:[^;]+;base64,/, "")
+          .replace(/\s/g, "");
+
+        if (!draftId || !immagineBase64) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Bozza o immagine mancanti."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (!/^[A-Za-z0-9_-]+$/.test(draftId)) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "ID bozza non valido."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (!immagineBase64.startsWith("/9j/")) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Instagram accetta solo immagini JPEG."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        if (immagineBase64.length > 850000) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Immagine troppo pesante per la pubblicazione."
+            },
+            413,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        const bozza =
+          await leggiDocumentoConServiceAccount(
+            {
+              env,
+              accessToken,
+              percorso:
+                `instagramDrafts/${encodeURIComponent(
+                  draftId
+                )}`
+            }
+          );
+
+        if (!bozza) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "La bozza non esiste più."
+            },
+            404,
+            origin,
+            env
+          );
+        }
+
+        const statoBozza = String(
+          valoreFirestore(bozza.fields?.stato) ||
+            ""
+        );
+
+        if (statoBozza === "pubblicata") {
+          return rispostaJson(
+            {
+              success: true,
+              giaPubblicato: true,
+              mediaId:
+                valoreFirestore(
+                  bozza.fields?.mediaId
+                ) || "",
+              permalink:
+                valoreFirestore(
+                  bozza.fields?.permalink
+                ) || ""
+            },
+            200,
+            origin,
+            env
+          );
+        }
+
+        if (statoBozza === "scartata") {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Questa bozza è stata scartata: non si può pubblicare."
+            },
+            409,
+            origin,
+            env
+          );
+        }
+
+        const token = await tokenInstagram({
+          env,
+          accessToken
+        });
+
+        if (!token) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Instagram non è configurato: manca il token di accesso nel Worker."
+            },
+            503,
+            origin,
+            env
+          );
+        }
+
+        await scriviDocumentoConServiceAccount({
+          env,
+          accessToken,
+          percorso:
+            `instagramMedia/${encodeURIComponent(
+              draftId
+            )}`,
+          campiAggiornati: [
+            "postId",
+            "jpegBase64",
+            "createdAt"
+          ],
+          fields: {
+            postId: { stringValue: draftId },
+            jpegBase64: {
+              stringValue: immagineBase64
+            },
+            createdAt: {
+              stringValue:
+                new Date().toISOString()
+            }
+          }
+        });
+
+        const imageUrl =
+          `${urlRichiesta.origin}/media/` +
+          `${encodeURIComponent(draftId)}.jpg`;
+
+        const pubblicato =
+          await pubblicaImmagineSuInstagram({
+            token,
+            imageUrl,
+            caption
+          });
+
+        const publishedAt =
+          new Date().toISOString();
+
+        await scriviDocumentoConServiceAccount({
+          env,
+          accessToken,
+          percorso:
+            `instagramDrafts/${encodeURIComponent(
+              draftId
+            )}`,
+          campiAggiornati: [
+            "stato",
+            "mediaId",
+            "permalink",
+            "caption",
+            "publishedAt"
+          ],
+          fields: {
+            stato: { stringValue: "pubblicata" },
+            mediaId: {
+              stringValue: pubblicato.mediaId
+            },
+            permalink: {
+              stringValue: pubblicato.permalink
+            },
+            caption: { stringValue: caption },
+            publishedAt: {
+              stringValue: publishedAt
+            }
+          }
+        });
+
+        return rispostaJson(
+          {
+            success: true,
+            draftId,
+            mediaId: pubblicato.mediaId,
+            permalink: pubblicato.permalink,
+            publishedAt
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/drafts/publish:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante la pubblicazione della bozza."
+          },
+          errore.status || 500,
+          origin,
+          env
+        );
+      }
+    }
+
+    /*
+     * Scarta una bozza senza pubblicare nulla.
+     */
+    if (
+      request.method === "POST" &&
+      urlRichiesta.pathname ===
+        "/instagram/drafts/discard"
+    ) {
+      try {
+        const idToken =
+          leggiBearerToken(request);
+
+        if (!idToken) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Token Firebase Authentication mancante."
+            },
+            401,
+            origin,
+            env
+          );
+        }
+
+        const identita =
+          await verificaFirebaseIdToken(
+            idToken,
+            env
+          );
+
+        const profilo =
+          await recuperaUtenteFirestore(
+            identita.uid,
+            idToken,
+            env
+          );
+
+        if (!utenteAmministratore(profilo)) {
+          return rispostaJson(
+            {
+              success: false,
+              error:
+                "Solo gli amministratori possono scartare una bozza."
+            },
+            403,
+            origin,
+            env
+          );
+        }
+
+        const corpo = await request
+          .json()
+          .catch(() => ({}));
+
+        const draftId = String(
+          corpo.draftId || ""
+        ).trim();
+
+        if (!/^[A-Za-z0-9_-]+$/.test(draftId)) {
+          return rispostaJson(
+            {
+              success: false,
+              error: "ID bozza non valido."
+            },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const serviceAccount = JSON.parse(
+          env.FIREBASE_SERVICE_ACCOUNT
+        );
+
+        const accessToken =
+          await ottieniAccessToken(serviceAccount);
+
+        await scriviDocumentoConServiceAccount({
+          env,
+          accessToken,
+          percorso:
+            `instagramDrafts/${encodeURIComponent(
+              draftId
+            )}`,
+          campiAggiornati: [
+            "stato",
+            "scartataIl"
+          ],
+          fields: {
+            stato: { stringValue: "scartata" },
+            scartataIl: {
+              stringValue:
+                new Date().toISOString()
+            }
+          }
+        });
+
+        return rispostaJson(
+          {
+            success: true,
+            draftId
+          },
+          200,
+          origin,
+          env
+        );
+      } catch (errore) {
+        console.error(
+          "Errore endpoint /instagram/drafts/discard:",
+          errore
+        );
+
+        return rispostaJson(
+          {
+            success: false,
+            error:
+              errore.message ||
+              "Errore durante lo scarto della bozza."
+          },
+          500,
           origin,
           env
         );

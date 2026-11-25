@@ -16,15 +16,25 @@ const CARATTERI_CAPTION = 2200;
 
 export const creaCaptionInstagram = (
   testo,
+  hashtagExtra = "",
   massimoCaratteri = CARATTERI_CAPTION
 ) => {
   const pulito = String(testo || "").trim();
   const trovati = pulito.match(/#[\p{L}\p{N}_]+/gu) || [];
 
+  /*
+   * Il pannello della dashboard permette di aggiungere hashtag fissi
+   * oltre a quelli gia' scritti nello spotted.
+   */
+  const extra =
+    String(hashtagExtra || "").match(
+      /#[\p{L}\p{N}_]+/gu
+    ) || [];
+
   const hashtag = [];
   const visti = new Set();
 
-  [...HASHTAG_FISSI, ...trovati].forEach((voce) => {
+  [...HASHTAG_FISSI, ...extra, ...trovati].forEach((voce) => {
     const tag = String(voce).trim().replace(/[.,;:!?]+$/, "");
     const chiave = tag.toLowerCase();
 

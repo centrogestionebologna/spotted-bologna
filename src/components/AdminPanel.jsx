@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { creaImmagineSpotted } from "../utils/immagineSpotted";
 import { creaCaptionInstagram } from "../utils/captionInstagram";
+import { esportaJpeg } from "../utils/esportaJpeg";
 
 import {
   leggiConfigurazioneInstagram
@@ -48,48 +49,22 @@ const nomiSegnalatori = (reportedBy, utenti) =>
   );
 
 /*
- * Instagram accetta solo JPEG: la card dell'app viene disegnata su
- * canvas, quindi la riesportiamo in JPEG riducendo la qualita' finche'
- * resta sotto il limite del documento Firestore che la contiene.
- */
-const esportaJpeg = (canvas) => {
-  const qualitaDisponibili = [
-    0.86, 0.8, 0.74, 0.68, 0.6
-  ];
-
-  for (const qualita of qualitaDisponibili) {
-    const dataUrl = canvas.toDataURL(
-      "image/jpeg",
-      qualita
-    );
-
-    if (dataUrl.length <= 850000) {
-      return dataUrl;
-    }
-  }
-
-  throw new Error(
-    "L'immagine resta troppo pesante per la pubblicazione."
-  );
-};
-
-/*
  * Anteprima e pubblicazione su Instagram di uno spotted in attesa:
  * l'admin vede la card, puo' correggere la descrizione e solo dopo
  * pubblica e approva.
  */
 function InstagramBox({
   post,
-  pubblicaInstagram
+  pubblicaInstagram,
+  auto = true,
+  hashtags = ""
 }) {
   const [anteprima, setAnteprima] = useState("");
   const [caption, setCaption] = useState("");
   const [inCorso, setInCorso] = useState(false);
   const [errore, setErrore] = useState("");
-
-  if (!pubblicaInstagram) {
-    return null;
-  }
+  const [tentatoAuto, setTentatoAuto] = useState(false);
+  const contenitoreRef = useRef(null);
 
   const apriAnteprima = async () => {
     setErrore("");
@@ -114,7 +89,10 @@ function InstagramBox({
       );
 
       setCaption(
-        creaCaptionInstagram(post.text)
+        creaCaptionInstagram(
+          post.text,
+          hashtags
+        )
       );
       setAnteprima(esportaJpeg(canvas));
     } catch (erroreCard) {
@@ -126,6 +104,52 @@ function InstagramBox({
       setInCorso(false);
     }
   };
+
+  /*
+   * Con la pubblicazione automatica attiva non serve preparare la
+   * card a mano: quando l'admin apre lo spotted la card e' gia'
+   * pronta e deve solo confermare.
+   */
+  useEffect(() => {
+    if (!auto || tentatoAuto || !pubblicaInstagram) {
+      return;
+    }
+
+    const nodo = contenitoreRef.current;
+
+    /*
+     * La card si prepara solo quando lo spotted entra nello schermo:
+     * con molti spotted in coda non parte un rendering per ognuno.
+     */
+    if (
+      !nodo ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      setTentatoAuto(true);
+      apriAnteprima();
+      return undefined;
+    }
+
+    const osservatore = new IntersectionObserver(
+      (voci) => {
+        if (voci.some((voce) => voce.isIntersecting)) {
+          osservatore.disconnect();
+          setTentatoAuto(true);
+          apriAnteprima();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    osservatore.observe(nodo);
+
+    return () => osservatore.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!pubblicaInstagram) {
+    return null;
+  }
 
   const conferma = async () => {
     setErrore("");
@@ -151,14 +175,19 @@ function InstagramBox({
 
   if (!anteprima) {
     return (
-      <div style={{ marginTop: "12px" }}>
+      <div
+        ref={contenitoreRef}
+        style={{ marginTop: "12px" }}
+      >
         <button
           onClick={apriAnteprima}
           disabled={inCorso}
         >
           {inCorso
             ? "⏳ Preparo la card..."
-            : "📸 Pubblica su Instagram"}
+            : auto
+              ? "📸 Prepara la card"
+              : "📸 Pubblica su Instagram"}
         </button>
 
         {errore && (
@@ -254,6 +283,8 @@ function AdminPanel({
   approvaPost,
   rifiutaPost,
   pubblicaInstagram,
+  instagramAuto = true,
+  instagramHashtags = "",
   utenti = []
 }) {
   return (
@@ -375,6 +406,8 @@ function AdminPanel({
             <InstagramBox
               post={post}
               pubblicaInstagram={pubblicaInstagram}
+              auto={instagramAuto}
+              hashtags={instagramHashtags}
             />
           </article>
         );
