@@ -4454,3 +4454,123 @@ details summary {
     width: 100%;
   }
 }
+
+/* ------------------------------------------------------------------
+   Testi lunghi e link dentro gli spotted.
+   Gli URL senza spazi non vanno fuori dalla card su mobile.
+------------------------------------------------------------------ */
+.post-card,
+.post-card p,
+.post-card a,
+.post-card .post-question-text,
+.post-card .post-answer-text,
+.post-card .post-question-block,
+.post-card .post-answer-block,
+.comment-card,
+.comment-card p,
+.comment-card a,
+.like-panel,
+.like-panel p,
+.notification-card,
+.notification-card p,
+.notification-card a {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.post-card a,
+.comment-card a {
+  display: inline;
+}
+
+/* ------------------------------------------------------------------
+   Pannelli (nickname, notifiche, schede community).
+   Su telefono sono finestre centrate, con margini di sicurezza e
+   altezza calcolata sulla viewport reale del browser.
+------------------------------------------------------------------ */
+.pannello,
+.pannello-corpo,
+.pannello-corpo .impostazioni-notifiche,
+.pannello-corpo .notifications-layout,
+.pannello-corpo .notifications-left,
+.pannello-corpo .notifications-right {
+  min-width: 0;
+}
+
+.pannello-corpo img {
+  max-width: 100%;
+  height: auto;
+}
+
+.pannello-corpo input,
+.pannello-corpo textarea,
+.pannello-corpo select {
+  max-width: 100%;
+}
+
+.pannello-corpo .notifications-head button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .pannello-sfondo {
+    align-items: center;
+    justify-content: center;
+
+    padding: 12px;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      12px
+      max(12px, env(safe-area-inset-bottom));
+  }
+
+  .pannello {
+    width: 100%;
+    max-width: 560px;
+
+    max-height: 86vh;
+    max-height: calc(100dvh - 24px);
+
+    border-radius: 20px;
+    border: 1px solid rgba(244, 197, 66, 0.26);
+  }
+
+  .pannello-testa {
+    padding: 13px 16px;
+  }
+
+  .pannello-corpo {
+    padding: 14px 16px 18px;
+
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pannello-corpo .notifications-layout {
+    gap: 14px;
+  }
+
+  .pannello-corpo .notifications-right {
+    padding-top: 14px;
+  }
+
+  .pannello-corpo .notification-row {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 380px) {
+  .pannello-sfondo {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .pannello-corpo {
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+}
