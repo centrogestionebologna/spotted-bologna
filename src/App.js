@@ -14,6 +14,9 @@ import "./App.css";
 
 import {
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   onAuthStateChanged,
   signOut
 } from "firebase/auth";
@@ -56,7 +59,6 @@ import {
   ascoltaNotificheInPrimoPiano,
   mostraNotificaInPrimoPiano,
   sincronizzaTokenPush,
-  attivaNotifichePush,
   verificaNotifichePush,
   infoSupportoPush
 } from "./services/pushNotifications";
@@ -371,6 +373,10 @@ const [followRequestInProgress, setFollowRequestInProgress] = useState({});
   useState(0);  const [postVisibili, setPostVisibili] =
   useState(10);
   const [
+  spottedVisitatoriVisibili,
+  setSpottedVisitatoriVisibili
+  ] = useState(5);
+  const [
   postScreenshotVisibili,
   setPostScreenshotVisibili
   ] = useState(3); 
@@ -387,6 +393,34 @@ const [followRequestInProgress, setFollowRequestInProgress] = useState({});
  */
 const [pannelloProfilo, setPannelloProfilo] =
   useState(null);
+
+/*
+ * Finestra di accesso: prima si sceglie il metodo (Google o email),
+ * poi eventualmente si compila il form email.
+ */
+const [mostraAccesso, setMostraAccesso] =
+  useState(false);
+
+const [metodoAccesso, setMetodoAccesso] =
+  useState("scelta");
+
+const [modalitaEmail, setModalitaEmail] =
+  useState("login");
+
+const [emailAccesso, setEmailAccesso] =
+  useState("");
+
+const [passwordAccesso, setPasswordAccesso] =
+  useState("");
+
+const [erroreAccesso, setErroreAccesso] =
+  useState("");
+
+const [avvisoAccesso, setAvvisoAccesso] =
+  useState("");
+
+const [accessoInCorso, setAccessoInCorso] =
+  useState(false);
 
 const [notifications, setNotifications] =
   useState([]);
@@ -465,18 +499,10 @@ const [avvioConcluso, setAvvioConcluso] = useState(false);
 const [passoNotifiche, setPassoNotifiche] = useState(false);
 const [salvataggioNotifiche, setSalvataggioNotifiche] =
   useState(false);
-const [attivazionePushOnboarding, setAttivazionePushOnboarding] =
-  useState(false);
 const [messaggioPushOnboarding, setMessaggioPushOnboarding] =
   useState("");
-const [pushAttiveOnboarding, setPushAttiveOnboarding] =
+const [pushOnboardingFallita, setPushOnboardingFallita] =
   useState(false);
-const [verificaPushOnboarding, setVerificaPushOnboarding] =
-  useState(false);
-const [
-  messaggioVerificaPushOnboarding,
-  setMessaggioVerificaPushOnboarding
-] = useState("");
 
   const [newsletter, setNewsletter] =
   useState("mai");
@@ -536,6 +562,21 @@ const [
   setApprovalEnabledGroups
 ] = useState(true);
 
+/*
+ * Instagram: con la pubblicazione automatica attiva l'admin deve
+ * solo approvare lo spotted, mentre gli hashtag aggiuntivi vengono
+ * uniti a quelli fissi nella descrizione.
+ */
+const [
+  instagramAutoPublish,
+  setInstagramAutoPublish
+] = useState(true);
+
+const [
+  instagramHashtags,
+  setInstagramHashtags
+] = useState("");
+
 const [
   mostraPropostaGruppo,
   setMostraPropostaGruppo
@@ -549,6 +590,20 @@ const [
 const [
   propostaLink,
   setPropostaLink
+] = useState("");
+
+/*
+ * Le proposte gruppo possono avere un link esterno oppure essere
+ * gruppi interni, con la chat che si apre in un popup.
+ */
+const [
+  propostaTipo,
+  setPropostaTipo
+] = useState("link");
+
+const [
+  propostaNomeGruppo,
+  setPropostaNomeGruppo
 ] = useState("");
 
 const [
@@ -946,6 +1001,14 @@ const caricaImpostazioni = async () => {
     snap.data().approvalEnabledGroups ?? true
   );
 
+  setInstagramAutoPublish(
+    snap.data().instagramAutoPublish ?? true
+  );
+
+  setInstagramHashtags(
+    snap.data().instagramHashtags || ""
+  );
+
 }
 
 };
@@ -1097,7 +1160,174 @@ setPosts(lista);
     setComments(lista);
   };
 
+  const messaggioErroreAccesso = (errore) => {
+    const codice = errore?.code || "";
+
+    switch (codice) {
+      case "auth/invalid-email":
+        return "Inserisci un indirizzo email valido.";
+      case "auth/missing-email":
+        return "Inserisci la tua email.";
+      case "auth/missing-password":
+        return "Inserisci la password.";
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+      case "auth/invalid-credential":
+        return "Email o password non corretti.";
+      case "auth/email-already-in-use":
+        return "Esiste già un account con questa email. Prova ad accedere.";
+      case "auth/account-exists-with-different-credential":
+        return "Questa email è già collegata a un altro metodo di accesso. Prova con Google o con la password.";
+      case "auth/weak-password":
+        return "La password deve contenere almeno 6 caratteri.";
+      case "auth/too-many-requests":
+        return "Troppi tentativi. Riprova tra qualche minuto.";
+      case "auth/network-request-failed":
+        return "Connessione assente o instabile. Controlla la rete e riprova.";
+      case "auth/operation-not-allowed":
+        return "L'accesso con email non è ancora attivo. Riprova più tardi.";
+      case "auth/popup-blocked":
+        return "Il browser ha bloccato la finestra di Google. Consentila e riprova.";
+      default:
+        return "Non è stato possibile completare l'accesso. Riprova.";
+    }
+  };
+
+  const apriAccesso = () => {
+    setMetodoAccesso("scelta");
+    setModalitaEmail("login");
+    setEmailAccesso("");
+    setPasswordAccesso("");
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+    setMostraAccesso(true);
+  };
+
+  const chiudiAccesso = () => {
+    setMostraAccesso(false);
+    setMetodoAccesso("scelta");
+    setPasswordAccesso("");
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+  };
+
+  const accediConEmail = async (evento) => {
+    evento.preventDefault();
+
+    if (accessoInCorso) return;
+
+    const email = emailAccesso.trim();
+
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+
+    if (!email) {
+      setErroreAccesso("Inserisci la tua email.");
+      return;
+    }
+
+    if (!passwordAccesso) {
+      setErroreAccesso("Inserisci la password.");
+      return;
+    }
+
+    setAccessoInCorso(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, email, passwordAccesso);
+      setPasswordAccesso("");
+      setMostraAccesso(false);
+    } catch (errore) {
+      console.error(errore);
+      setErroreAccesso(messaggioErroreAccesso(errore));
+    } finally {
+      setAccessoInCorso(false);
+    }
+  };
+
+  const registratiConEmail = async (evento) => {
+    evento.preventDefault();
+
+    if (accessoInCorso) return;
+
+    const email = emailAccesso.trim();
+
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+
+    if (!email) {
+      setErroreAccesso("Inserisci la tua email.");
+      return;
+    }
+
+    if (passwordAccesso.length < 6) {
+      setErroreAccesso(
+        "La password deve contenere almeno 6 caratteri."
+      );
+      return;
+    }
+
+    setAccessoInCorso(true);
+
+    try {
+      await createUserWithEmailAndPassword(
+        auth,
+        email,
+        passwordAccesso
+      );
+      setPasswordAccesso("");
+      setMostraAccesso(false);
+    } catch (errore) {
+      console.error(errore);
+      setErroreAccesso(messaggioErroreAccesso(errore));
+    } finally {
+      setAccessoInCorso(false);
+    }
+  };
+
+  const recuperaPassword = async (evento) => {
+    evento.preventDefault();
+
+    if (accessoInCorso) return;
+
+    const email = emailAccesso.trim();
+
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+
+    if (!email) {
+      setErroreAccesso("Inserisci la tua email.");
+      return;
+    }
+
+    setAccessoInCorso(true);
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setAvvisoAccesso(
+        "Ti abbiamo inviato un'email con il link per reimpostare la password. Controlla anche lo spam."
+      );
+    } catch (errore) {
+      console.error(errore);
+
+      if (errore?.code === "auth/user-not-found") {
+        // Non riveliamo se l'indirizzo esiste o meno.
+        setAvvisoAccesso(
+          "Se l'indirizzo è registrato, riceverai a breve un'email con il link per reimpostare la password."
+        );
+      } else {
+        setErroreAccesso(messaggioErroreAccesso(errore));
+      }
+    } finally {
+      setAccessoInCorso(false);
+    }
+  };
+
   const loginGoogle = async () => {
+    setErroreAccesso("");
+    setAvvisoAccesso("");
+    setAccessoInCorso(true);
+
     try {
       const result = await signInWithPopup(auth, provider);
 
@@ -1123,7 +1353,7 @@ setPosts(lista);
 
   await signOut(auth);
 
-  return;
+  return false;
 }
 if (
   userSnap.data().role ===
@@ -1184,9 +1414,22 @@ setNotifyAllLikes(
 
 
       setUser(currentUser);
+      setMostraAccesso(false);
+      return true;
 
     } catch (error) {
       console.error(error);
+
+      if (
+        error?.code !== "auth/popup-closed-by-user" &&
+        error?.code !== "auth/cancelled-popup-request"
+      ) {
+        setErroreAccesso(messaggioErroreAccesso(error));
+      }
+
+      return false;
+    } finally {
+      setAccessoInCorso(false);
     }
   };
 
@@ -1274,91 +1517,79 @@ const salvaNickname = async () => {
 };
 
 /*
- * Chiude il passo delle notifiche salvando la frequenza scelta. Il
- * fallimento non deve bloccare l'ingresso nell'app: le preferenze
- * restano modificabili dal profilo.
+ * Chiude il passo delle notifiche salvando la frequenza scelta. Se
+ * l'utente ha scelto un riepilogo, lo stesso clic attiva le push (con
+ * la richiesta di permesso del browser) e invia subito la notifica di
+ * prova; chi sceglie “Mai” non attiva nulla. Il fallimento non deve
+ * bloccare l'ingresso nell'app: le preferenze restano modificabili dal
+ * profilo e un secondo tocco su Continua entra senza push.
  */
 const confermaOnboardingNotifiche = async () => {
+  const vuolePush = newsletter !== "mai";
+  const provaPush = vuolePush && !pushOnboardingFallita;
+
   setSalvataggioNotifiche(true);
-
-  try {
-    if (user) {
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          newsletter,
-          notificheImpostate: true
-        },
-        { merge: true }
-      );
-    }
-  } catch (errore) {
-    console.warn(
-      "Preferenze notifiche non salvate:",
-      errore
-    );
-  } finally {
-    setSalvataggioNotifiche(false);
-    setPassoNotifiche(false);
-  }
-};
-
-const attivaPushOnboarding = async () => {
-  setAttivazionePushOnboarding(true);
   setMessaggioPushOnboarding("");
 
-  try {
-    await attivaNotifichePush();
+  const salvaPreferenze = async () => {
+    try {
+      if (user) {
+        await setDoc(
+          doc(db, "users", user.uid),
+          {
+            newsletter,
+            notificheImpostate: true
+          },
+          { merge: true }
+        );
+      }
+    } catch (errore) {
+      console.warn(
+        "Preferenze notifiche non salvate:",
+        errore
+      );
+    }
+  };
 
-    setPushAttiveOnboarding(true);
+  /*
+   * La richiesta di permesso parte subito dopo il clic, prima di ogni
+   * altra attesa: alcuni browser la accettano solo mentre il tocco e'
+   * ancora “fresco”. verificaNotifichePush attiva il token del
+   * dispositivo e chiede al Worker la push di prova, che arriva con il
+   * messaggio “Le notifiche sono attive!”.
+   */
+  if (provaPush) {
     setMessaggioPushOnboarding(
-      "✅ Notifiche push attivate su questo dispositivo."
-    );
-  } catch (errore) {
-    console.warn(
-      "Attivazione push dal primo accesso fallita:",
-      errore
+      "🔔 Consenti le notifiche nel messaggio del browser."
     );
 
-    setMessaggioPushOnboarding(
-      `❌ ${errore.message}`
-    );
-  } finally {
-    setAttivazionePushOnboarding(false);
+    try {
+      await verificaNotifichePush();
+
+      setPushOnboardingFallita(false);
+    } catch (errore) {
+      console.warn(
+        "Push dal primo accesso non attivate:",
+        errore
+      );
+
+      /* La frequenza scelta non va persa anche se le push falliscono. */
+      await salvaPreferenze();
+
+      setPushOnboardingFallita(true);
+      setSalvataggioNotifiche(false);
+      setMessaggioPushOnboarding(
+        `❌ ${errore.message}`
+      );
+
+      return;
+    }
   }
-};
 
-const verificaNotificheOnboarding = async () => {
-  setVerificaPushOnboarding(true);
-  setMessaggioVerificaPushOnboarding("");
+  await salvaPreferenze();
 
-  try {
-    const risultato = await verificaNotifichePush();
-
-    setPushAttiveOnboarding(true);
-    const totale =
-      risultato.totalDevices ||
-      risultato.sent;
-
-    setMessaggioVerificaPushOnboarding(
-      `✅ Notifica di prova inviata${
-        totale > 1
-          ? ` (${risultato.sent} su ${totale} dispositivi)`
-          : ""
-      }. Controlla la notifica sul dispositivo.`
-    );
-  } catch (errore) {
-    console.warn(
-      "Verifica push dal primo accesso fallita:",
-      errore
-    );
-
-    setMessaggioVerificaPushOnboarding(
-      `❌ ${errore.message}`
-    );
-  } finally {
-    setVerificaPushOnboarding(false);
-  }
+  setSalvataggioNotifiche(false);
+  setPassoNotifiche(false);
 };
 
 const pubblicaRispostaDomanda = async (
@@ -1810,17 +2041,29 @@ const inviaPropostaGruppo = async () => {
   const linkPulito =
     propostaLink.trim();
 
+  const vuoleChatInterna =
+    propostaTipo === "interno";
+
+  const nomePulito =
+    propostaNomeGruppo.trim();
+
   if (!descrizionePulita) {
     alert("Inserisci una descrizione.");
     return;
   }
 
-  if (!linkPulito) {
+  if (vuoleChatInterna && !nomePulito) {
+    alert("Inserisci il nome del gruppo.");
+    return;
+  }
+
+  if (!vuoleChatInterna && !linkPulito) {
     alert("Inserisci un link.");
     return;
   }
 
   if (
+    !vuoleChatInterna &&
     !/^https?:\/\/.+/i.test(linkPulito)
   ) {
     alert(
@@ -1850,8 +2093,16 @@ const inviaPropostaGruppo = async () => {
 
   const nuovaProposta = {
     type: "groupProposal",
+    groupKind: vuoleChatInterna
+      ? "interno"
+      : "link",
+    groupName: vuoleChatInterna
+      ? nomePulito
+      : "",
     text: descrizionePulita,
-    groupLink: linkPulito,
+    groupLink: vuoleChatInterna
+      ? ""
+      : linkPulito,
     requiredLikes: Math.max(
       1,
       Number(propostaTargetLike) || 10
@@ -1917,6 +2168,8 @@ const inviaPropostaGruppo = async () => {
 
     setPropostaDescrizione("");
     setPropostaLink("");
+    setPropostaTipo("link");
+    setPropostaNomeGruppo("");
     setPropostaTargetLike(10);
     setMostraPropostaGruppo(false);
   } catch (errore) {
@@ -2720,6 +2973,42 @@ async () => {
 
 };
 
+const toggleInstagramAutoPublish =
+async () => {
+
+  await updateDoc(
+    doc(db, "settings", "general"),
+    {
+      instagramAutoPublish:
+        !instagramAutoPublish
+    }
+  );
+
+  setInstagramAutoPublish(
+    !instagramAutoPublish
+  );
+
+};
+
+const salvaInstagramHashtags = async (
+  valore
+) => {
+
+  const hashtags = String(
+    valore || ""
+  ).trim();
+
+  await updateDoc(
+    doc(db, "settings", "general"),
+    {
+      instagramHashtags: hashtags
+    }
+  );
+
+  setInstagramHashtags(hashtags);
+
+};
+
 const salvaNewsletter = async () => {
 
   if (!user) return;
@@ -3166,6 +3455,21 @@ useEffect(() => {
  * segue la stessa paginazione di “Mostra altri spotted”.
  */
 const testoRicerca = ricercaSpotted.toLowerCase();
+
+/*
+ * Chi non ha fatto accesso vede al massimo gli ultimi 15 spotted: la
+ * paginazione parte da 5 e si allarga di 5 alla volta, poi al posto di
+ * “Mostra altri spotted” compare l'invito ad accedere.
+ */
+const LIMITE_SPOTTED_VISITATORI = 15;
+const PASSO_SPOTTED_VISITATORI = 5;
+
+const limiteSpotted = user
+  ? postVisibili
+  : Math.min(
+      spottedVisitatoriVisibili,
+      LIMITE_SPOTTED_VISITATORI
+    );
 
 const feed = [
   ...posts
@@ -3731,12 +4035,15 @@ if (!avvioConcluso) {
   );
 }
 
-const supportoPushOnboarding = infoSupportoPush();
+/*
+ * Primo accesso: finche' l'utente non ha scelto il nickname e poi le
+ * preferenze di notifica si mostra solo il passaggio di onboarding,
+ * senza gruppi ne' feed degli spotted.
+ */
+const onboardingInCorso =
+  Boolean(user) && (!savedNickname || passoNotifiche);
 
-const pushGiaAttive =
-  pushAttiveOnboarding ||
-  (typeof Notification !== "undefined" &&
-    Notification.permission === "granted");
+const supportoPushOnboarding = infoSupportoPush();
 
 const analisiPubblicitaSpotted =
   analizzaPubblicita(spottedText);
@@ -3844,6 +4151,269 @@ return (
   </div>
 )}
 
+    {!user && mostraAccesso && (
+  <div
+    className="pannello-sfondo"
+    role="presentation"
+    onClick={chiudiAccesso}
+  >
+    <div
+      className="pannello accesso-pannello"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="accesso-titolo"
+      onClick={(evento) => evento.stopPropagation()}
+    >
+
+      <div className="pannello-testa">
+
+        <h2 id="accesso-titolo">🔐 Accedi</h2>
+
+        <button
+          type="button"
+          className="pannello-chiudi"
+          aria-label="Chiudi"
+          onClick={chiudiAccesso}
+        >
+          ×
+        </button>
+
+      </div>
+
+      <div className="pannello-corpo accesso-corpo">
+
+        {metodoAccesso === "scelta" ? (
+          <>
+            <p className="accesso-intro">
+              Scegli come entrare su Spotted Bologna.
+            </p>
+
+            <div className="accesso-opzioni">
+
+              <button
+                type="button"
+                className="accesso-opzione"
+                onClick={loginGoogle}
+                disabled={accessoInCorso}
+              >
+                <span
+                  className="accesso-opzione-icona is-google"
+                  aria-hidden="true"
+                >
+                  G
+                </span>
+
+                <span className="accesso-opzione-testo">
+                  <strong>Continua con Google</strong>
+                  <small>Usa il tuo account Google</small>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="accesso-opzione"
+                onClick={() => {
+                  setMetodoAccesso("email");
+                  setErroreAccesso("");
+                  setAvvisoAccesso("");
+                }}
+              >
+                <span
+                  className="accesso-opzione-icona is-email"
+                  aria-hidden="true"
+                >
+                  ✉️
+                </span>
+
+                <span className="accesso-opzione-testo">
+                  <strong>Continua con email</strong>
+                  <small>
+                    Accedi o crea un account con email e password
+                  </small>
+                </span>
+              </button>
+
+            </div>
+
+            {erroreAccesso && (
+              <p className="accesso-errore" role="alert">
+                {erroreAccesso}
+              </p>
+            )}
+          </>
+        ) : (
+          <form
+            className="accesso-form"
+            onSubmit={
+              modalitaEmail === "login"
+                ? accediConEmail
+                : modalitaEmail === "registrazione"
+                  ? registratiConEmail
+                  : recuperaPassword
+            }
+          >
+
+            <button
+              type="button"
+              className="accesso-indietro"
+              onClick={() => {
+                setMetodoAccesso("scelta");
+                setErroreAccesso("");
+                setAvvisoAccesso("");
+              }}
+            >
+              ← Altri metodi di accesso
+            </button>
+
+            <h3 className="accesso-titolo-form">
+              {modalitaEmail === "login"
+                ? "Accedi con email"
+                : modalitaEmail === "registrazione"
+                  ? "Crea un account"
+                  : "Recupera la password"}
+            </h3>
+
+            <label className="accesso-campo">
+              <span>Email</span>
+              <input
+                type="email"
+                value={emailAccesso}
+                onChange={(evento) =>
+                  setEmailAccesso(evento.target.value)
+                }
+                placeholder="nome@esempio.it"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck="false"
+                required
+              />
+            </label>
+
+            {modalitaEmail !== "recupero" && (
+              <label className="accesso-campo">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={passwordAccesso}
+                  onChange={(evento) =>
+                    setPasswordAccesso(evento.target.value)
+                  }
+                  placeholder={
+                    modalitaEmail === "registrazione"
+                      ? "Almeno 6 caratteri"
+                      : "La tua password"
+                  }
+                  autoComplete={
+                    modalitaEmail === "registrazione"
+                      ? "new-password"
+                      : "current-password"
+                  }
+                  required
+                />
+              </label>
+            )}
+
+            {modalitaEmail === "registrazione" && (
+              <p className="accesso-nota">
+                Il nickname lo scegli subito dopo il primo accesso.
+              </p>
+            )}
+
+            {erroreAccesso && (
+              <p className="accesso-errore" role="alert">
+                {erroreAccesso}
+              </p>
+            )}
+
+            {avvisoAccesso && (
+              <p className="accesso-avviso" role="status">
+                {avvisoAccesso}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="accesso-invia"
+              disabled={accessoInCorso}
+            >
+              {accessoInCorso
+                ? "Attendi…"
+                : modalitaEmail === "login"
+                  ? "Accedi"
+                  : modalitaEmail === "registrazione"
+                    ? "Crea account"
+                    : "Invia link"}
+            </button>
+
+            <div className="accesso-collegamenti">
+
+              {modalitaEmail === "login" && (
+                <>
+                  <button
+                    type="button"
+                    className="accesso-link"
+                    onClick={() => {
+                      setModalitaEmail("recupero");
+                      setErroreAccesso("");
+                      setAvvisoAccesso("");
+                    }}
+                  >
+                    Password dimenticata?
+                  </button>
+
+                  <button
+                    type="button"
+                    className="accesso-link"
+                    onClick={() => {
+                      setModalitaEmail("registrazione");
+                      setErroreAccesso("");
+                      setAvvisoAccesso("");
+                    }}
+                  >
+                    Non hai un account? Registrati
+                  </button>
+                </>
+              )}
+
+              {modalitaEmail === "registrazione" && (
+                <button
+                  type="button"
+                  className="accesso-link"
+                  onClick={() => {
+                    setModalitaEmail("login");
+                    setErroreAccesso("");
+                    setAvvisoAccesso("");
+                  }}
+                >
+                  Hai già un account? Accedi
+                </button>
+              )}
+
+              {modalitaEmail === "recupero" && (
+                <button
+                  type="button"
+                  className="accesso-link"
+                  onClick={() => {
+                    setModalitaEmail("login");
+                    setErroreAccesso("");
+                    setAvvisoAccesso("");
+                  }}
+                >
+                  Torna all'accesso
+                </button>
+              )}
+
+            </div>
+
+          </form>
+        )}
+
+      </div>
+
+    </div>
+  </div>
+)}
+
     {!user && (
   <div className="login-card">
 
@@ -3867,15 +4437,9 @@ return (
     <button
       type="button"
       className="login-google"
-      onClick={loginGoogle}
+      onClick={apriAccesso}
     >
-      <span
-        className="login-google-badge"
-        aria-hidden="true"
-      >
-        G
-      </span>
-      Accedi con Google
+      Accedi
     </button>
 
     <p className="login-note">
@@ -3984,32 +4548,10 @@ return (
       like sugli spotted che segui, più le novità importanti.
     </p>
 
-    <button
-      type="button"
-      onClick={attivaPushOnboarding}
-      disabled={
-        attivazionePushOnboarding || pushGiaAttive
-      }
-    >
-      {attivazionePushOnboarding
-        ? "Attivazione..."
-        : pushGiaAttive
-        ? "🔔 Push attive su questo dispositivo"
-        : "🔔 Attiva notifiche push"}
-    </button>
-
-    <button
-      type="button"
-      onClick={verificaNotificheOnboarding}
-      disabled={
-        verificaPushOnboarding ||
-        attivazionePushOnboarding
-      }
-    >
-      {verificaPushOnboarding
-        ? "Invio della prova..."
-        : "📨 Invia notifica di prova"}
-    </button>
+    <p>
+      Scegliendo un riepilogo, “Continua” attiva le notifiche su questo
+      dispositivo e ti invia subito una notifica di prova.
+    </p>
 
     {supportoPushOnboarding.iOS &&
       !supportoPushOnboarding.standalone && (
@@ -4026,12 +4568,6 @@ return (
       </p>
     )}
 
-    {messaggioVerificaPushOnboarding && (
-      <p className="push-notifications-message">
-        {messaggioVerificaPushOnboarding}
-      </p>
-    )}
-
     <div className="onboarding-notifiche-actions">
       <button
         type="button"
@@ -4039,7 +4575,9 @@ return (
         disabled={salvataggioNotifiche}
       >
         {salvataggioNotifiche
-          ? "Salvataggio..."
+          ? "Attivazione notifiche..."
+          : pushOnboardingFallita
+          ? "Continua senza notifiche push"
           : "Continua"}
       </button>
     </div>
@@ -4047,7 +4585,7 @@ return (
   </div>
 )}
 
-{user && (!savedNickname || passoNotifiche) ? null : (
+{onboardingInCorso ? null : (
 <>
 
 <div className="section-card spotted-composer">
@@ -4145,14 +4683,79 @@ return (
 />
 
 {user && mostraPropostaGruppo && (
-<div className="section-card">
+<div
+  className="pannello-sfondo"
+  role="presentation"
+  onClick={() => setMostraPropostaGruppo(false)}
+>
+  <div
+    className="pannello"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="proposta-gruppo-titolo"
+    onClick={(evento) => evento.stopPropagation()}
+  >
 
-  <h2>📚 Proponi un gruppo</h2>
+    <div className="pannello-testa">
+
+      <h2 id="proposta-gruppo-titolo">
+        📚 Proponi un gruppo
+      </h2>
+
+      <button
+        type="button"
+        className="pannello-chiudi"
+        aria-label="Chiudi"
+        onClick={() => setMostraPropostaGruppo(false)}
+      >
+        ×
+      </button>
+
+    </div>
+
+    <div className="pannello-corpo">
 
   <p>
-    Descrivi bene il gruppo.
-    Non saranno disponibili commenti.
+    Puoi proporre un gruppo con un link esterno oppure
+    un gruppo interno a Spotted Bologna, con la chat che
+    si apre in un popup. Non saranno disponibili commenti.
   </p>
+
+  <div className="proposta-tipo">
+    <button
+      type="button"
+      className={
+        propostaTipo === "link" ? "attivo" : ""
+      }
+      onClick={() => setPropostaTipo("link")}
+    >
+      🔗 Link esterno
+    </button>
+
+    <button
+      type="button"
+      className={
+        propostaTipo === "interno" ? "attivo" : ""
+      }
+      onClick={() => setPropostaTipo("interno")}
+    >
+      💬 Gruppo interno
+    </button>
+  </div>
+
+  {propostaTipo === "interno" && (
+    <input
+      type="text"
+      maxLength={60}
+      value={propostaNomeGruppo}
+      onChange={(e) =>
+        setPropostaNomeGruppo(
+          e.target.value
+        )
+      }
+      placeholder="Nome del gruppo"
+    />
+  )}
 
   <textarea
     rows="5"
@@ -4165,16 +4768,25 @@ return (
     placeholder="Descrivi il gruppo..."
   />
 
-  <input
-    type="text"
-    value={propostaLink}
-    onChange={(e) =>
-      setPropostaLink(
-        e.target.value
-      )
-    }
-    placeholder="Link WhatsApp, Telegram o Instagram"
-  />
+  {propostaTipo === "link" && (
+    <input
+      type="text"
+      value={propostaLink}
+      onChange={(e) =>
+        setPropostaLink(
+          e.target.value
+        )
+      }
+      placeholder="Link WhatsApp, Telegram o Instagram"
+    />
+  )}
+
+  {propostaTipo === "interno" && (
+    <p style={{ color: "#999", fontSize: "14px" }}>
+      Il gruppo avrà una chat interna, solo testo ed emoji,
+      che si apre dopo il numero di like scelto.
+    </p>
+  )}
 
 <label
   style={{
@@ -4185,7 +4797,10 @@ return (
     fontWeight: "bold"
   }}
 >
-  ❤️ Numero di like necessari per rendere disponibile il link
+  ❤️ Numero di like necessari per{" "}
+  {propostaTipo === "interno"
+    ? "aprire la chat"
+    : "rendere disponibile il link"}
 </label>
 
 <p
@@ -4194,7 +4809,10 @@ return (
     fontSize: "14px"
   }}
 >
-  Il link resterà nascosto fino al raggiungimento di questo numero di like.
+  {propostaTipo === "interno"
+    ? "Il gruppo resterà nascosto"
+    : "Il link resterà nascosto"}{" "}
+  fino al raggiungimento di questo numero di like.
 </p>
 
 <input
@@ -4214,14 +4832,47 @@ return (
   📩 Invia proposta
 </button>
 
+    </div>
+
+  </div>
 </div>
 
 )}
 
 {isAdmin && mostraComunicazioneServizio && (
-<div className="section-card service-notice-form">
+<div
+  className="pannello-sfondo"
+  role="presentation"
+  onClick={() => setMostraComunicazioneServizio(false)}
+>
+  <div
+    className="pannello"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="comunicazione-servizio-titolo"
+    onClick={(evento) => evento.stopPropagation()}
+  >
 
-  <h2>🔧 Comunicazione di servizio</h2>
+    <div className="pannello-testa">
+
+      <h2 id="comunicazione-servizio-titolo">
+        🔧 Comunicazione di servizio
+      </h2>
+
+      <button
+        type="button"
+        className="pannello-chiudi"
+        aria-label="Chiudi"
+        onClick={() =>
+          setMostraComunicazioneServizio(false)
+        }
+      >
+        ×
+      </button>
+
+    </div>
+
+    <div className="pannello-corpo">
 
   <p>
     Compare tra gli spotted con il bordo dorato e arriva subito come
@@ -4270,6 +4921,9 @@ return (
       : "📣 Pubblica e notifica tutti"}
   </button>
 
+    </div>
+
+  </div>
 </div>
 )}
 
@@ -4360,6 +5014,9 @@ return (
     pubblicaInstagram={
       pubblicaSpottedAncheSuInstagram
     }
+    instagramAuto={instagramAutoPublish}
+    instagramHashtags={instagramHashtags}
+    utenti={utenti}
   />
 
 </details>
@@ -4402,6 +5059,14 @@ return (
     descriviNewsletter={descriviNewsletter}
     descriviSiNo={descriviSiNo}
     altriDatiUtente={altriDatiUtente}
+    instagramAutoPublish={instagramAutoPublish}
+    toggleInstagramAutoPublish={
+      toggleInstagramAutoPublish
+    }
+    instagramHashtags={instagramHashtags}
+    salvaInstagramHashtags={
+      salvaInstagramHashtags
+    }
   />
 
 </details>
@@ -4452,7 +5117,7 @@ return (
   </>
 )}
 
-{user && (
+{user && !onboardingInCorso && (
   <details className="admin-dashboard">
 
 <summary
@@ -4719,7 +5384,10 @@ return (
 
 )}
   </details>
-)}  
+)}
+
+{!onboardingInCorso && (
+<>
 
 <h2>Spotted pubblicati</h2>
 {isAdmin && (
@@ -4733,7 +5401,7 @@ setRicercaSpotted(e.target.value)
 />
 )}
 {feed
-  .slice(0, postVisibili)
+  .slice(0, limiteSpotted)
   .map((elemento) =>
   elemento.tipo === "comunicazione" ? (
   <article
@@ -4794,11 +5462,13 @@ setRicercaSpotted(e.target.value)
     postFollowers={postFollowers}
     toggleFollowPost={toggleFollowPost}
     followRequestInProgress={followRequestInProgress}
+    utenti={utenti}
+    nickname={savedNickname}
   />
   )
 )}
 
-{feed.length > postVisibili && (
+{user && feed.length > postVisibili && (
   <button
     onClick={() =>
       setPostVisibili(
@@ -4808,6 +5478,37 @@ setRicercaSpotted(e.target.value)
   >
     Mostra altri spotted
   </button>
+)}
+
+{!user &&
+  limiteSpotted <
+    Math.min(
+      feed.length,
+      LIMITE_SPOTTED_VISITATORI
+    ) && (
+    <button
+      onClick={() =>
+        setSpottedVisitatoriVisibili(
+          spottedVisitatoriVisibili +
+            PASSO_SPOTTED_VISITATORI
+        )
+      }
+    >
+      Mostra altri spotted
+    </button>
+  )}
+
+{!user &&
+  limiteSpotted >=
+    LIMITE_SPOTTED_VISITATORI &&
+  feed.length > LIMITE_SPOTTED_VISITATORI && (
+    <p className="spotted-visitors-lock">
+      🔒 Accedi per visualizzare gli altri
+      spotted
+    </p>
+  )}
+
+</>
 )}
 
     </div>

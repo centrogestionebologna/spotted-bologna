@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 
+import InstagramSettings from "./InstagramSettings";
+import InstagramAiPanel from "./InstagramAiPanel";
+
 const PAGINA_UTENTI = 10;
 
 const SEZIONI = [
   { key: "panoramica", etichetta: "Panoramica", icona: "📊" },
   { key: "utenti", etichetta: "Utenti", icona: "👥" },
-  { key: "regole", etichetta: "Regole", icona: "⚙️" }
+  { key: "regole", etichetta: "Regole", icona: "⚙️" },
+  {
+    key: "instagram",
+    etichetta: "Instagram",
+    icona: "📸"
+  }
 ];
 
 const NEWSLETTER_OPTIONS = [
@@ -797,7 +805,11 @@ function CommunityDashboard({
     (valore === undefined ? predefinito : valore)
       ? "Sì"
       : "No",
-  altriDatiUtente = () => []
+  altriDatiUtente = () => [],
+  instagramAutoPublish = true,
+  toggleInstagramAutoPublish = () => {},
+  instagramHashtags = "",
+  salvaInstagramHashtags = async () => {}
 }) {
   const [sezione, setSezione] = useState("panoramica");
   const [ricerca, setRicerca] = useState("");
@@ -1942,6 +1954,21 @@ function CommunityDashboard({
               </span>
             </div>
           </section>
+        </div>
+      )}
+
+      {sezione === "instagram" && (
+        <div className="community-instagram-stack">
+          <InstagramSettings
+            pendingPosts={pendingPosts}
+            posts={posts}
+            autoPublish={instagramAutoPublish}
+            onToggleAuto={toggleInstagramAutoPublish}
+            hashtags={instagramHashtags}
+            onSaveHashtags={salvaInstagramHashtags}
+          />
+
+          <InstagramAiPanel />
         </div>
       )}
 

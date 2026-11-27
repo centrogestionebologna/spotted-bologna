@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   addDoc,
@@ -24,6 +24,59 @@ const dataBreve = (valore) => {
   return Number.isNaN(data.getTime())
     ? ""
     : data.toLocaleDateString("it-IT");
+};
+
+/* Distanza circolare tra una domanda e quella al centro della ruota. */
+const offsetRuota = (indice, centro, totale) => {
+  if (!totale) return 0;
+
+  let scarto = (indice - centro) % totale;
+
+  if (scarto > totale / 2) scarto -= totale;
+  if (scarto < -totale / 2) scarto += totale;
+
+  return scarto;
+};
+
+/* Posizione 3D delle tre domande visibili nella ruota. */
+const stileCardRuota = (offset) => {
+  if (offset === 0) {
+    return {
+      transform:
+        "translateY(0) translateZ(0) rotateX(0deg) scale(1)",
+      opacity: 1,
+      zIndex: 3
+    };
+  }
+
+  if (offset === -1) {
+    return {
+      transform:
+        "translateY(-68px) translateZ(-70px) rotateX(22deg) scale(0.92)",
+      opacity: 0.55,
+      zIndex: 2
+    };
+  }
+
+  if (offset === 1) {
+    return {
+      transform:
+        "translateY(68px) translateZ(-70px) rotateX(-22deg) scale(0.92)",
+      opacity: 0.55,
+      zIndex: 2
+    };
+  }
+
+  return {
+    transform: `translateY(${
+      offset < 0 ? -160 : 160
+    }px) translateZ(-160px) rotateX(${
+      offset < 0 ? 40 : -40
+    }deg) scale(0.85)`,
+    opacity: 0,
+    zIndex: 1,
+    pointerEvents: "none"
+  };
 };
 
 function QuestionBox({
@@ -63,6 +116,14 @@ function QuestionBox({
   ] = useState("");
   const [messaggio, setMessaggio] = useState("");
   const [errore, setErrore] = useState("");
+  const [indiceRuota, setIndiceRuota] = useState(0);
+  const [pausaRuota, setPausaRuota] = useState(false);
+  const [
+    trascinamentoAttivo,
+    setTrascinamentoAttivo
+  ] = useState(false);
+  const trascinamento = useRef(null);
+  const trascinato = useRef(false);
 
   useEffect(() => {
     const domandeQuery = query(
@@ -87,7 +148,7 @@ function QuestionBox({
             (domanda) => domanda.id === corrente
           )
             ? corrente
-            : lista[0]?.id || ""
+            : ""
         );
       },
       (erroreQuery) => {
@@ -144,6 +205,149 @@ function QuestionBox({
     return unsubscribe;
   }, [isAdmin]);
 
+  useEffect(() => {
+    setIndiceRuota((corrente) =>
+      domandeAttive.length
+        ? corrente % domandeAttive.length
+        : 0
+    );
+  }, [domandeAttive]);
+
+  useEffect(() => {
+    if (
+      domandeAttive.length < 2 ||
+      domandaSelezionata ||
+      pausaRuota ||
+      trascinamentoAttivo
+    ) {
+      return undefined;
+    }
+
+    const movimentoRidotto =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+      ).matches;
+
+    if (movimentoRidotto) {
+      return undefined;
+    }
+
+    const intervallo = window.setInterval(() => {
+      setIndiceRuota(
+        (corrente) =>
+          (corrente + 1) % domandeAttive.length
+      );
+    }, 4200);
+
+    return () => window.clearInterval(intervallo);
+  }, [
+    domandeAttive.length,
+    domandaSelezionata,
+    pausaRuota,
+    trascinamentoAttivo
+  ]);
+
+  const domandaAttiva =
+    domandeAttive.find(
+      (domanda) => domanda.id === domandaSelezionata
+    ) || null;
+
+  const giraRuota = (passo) => {
+    if (domandeAttive.length < 2) return;
+
+    setDomandaSelezionata("");
+    setIndiceRuota((corrente) => {
+      const totale = domandeAttive.length;
+
+      return (corrente + passo + totale) % totale;
+    });
+  };
+
+  const selezionaDomanda = (domanda, indice) => {
+    setIndiceRuota(indice);
+    setErrore("");
+    setMessaggio("");
+
+    if (domandaSelezionata === domanda.id) {
+      setDomandaSelezionata("");
+      return;
+    }
+
+    setRisposta("");
+    setDomandaSelezionata(domanda.id);
+  };
+
+  const cliccaDomanda = (domanda, indice) => {
+    if (trascinato.current) {
+      trascinato.current = false;
+      return;
+    }
+
+    selezionaDomanda(domanda, indice);
+  };
+
+  const iniziaTrascinamento = (evento) => {
+    if (domandeAttive.length < 2) return;
+
+    trascinamento.current = {
+      x: evento.clientX,
+      y: evento.clientY
+    };
+    trascinato.current = false;
+    setTrascinamentoAttivo(true);
+
+    if (evento.currentTarget.setPointerCapture) {
+      evento.currentTarget.setPointerCapture(
+        evento.pointerId
+      );
+    }
+  };
+
+  const muoviTrascinamento = (evento) => {
+    if (!trascinamento.current) return;
+
+    const dx =
+      evento.clientX - trascinamento.current.x;
+    const dy =
+      evento.clientY - trascinamento.current.y;
+
+    if (Math.abs(dx) + Math.abs(dy) > 12) {
+      trascinato.current = true;
+    }
+  };
+
+  const terminaTrascinamento = (evento) => {
+    const inizio = trascinamento.current;
+
+    trascinamento.current = null;
+    setTrascinamentoAttivo(false);
+
+    if (!inizio) return;
+
+    const dx = evento.clientX - inizio.x;
+    const dy = evento.clientY - inizio.y;
+    const soglia = 34;
+
+    if (
+      Math.abs(dy) > soglia &&
+      Math.abs(dy) >= Math.abs(dx)
+    ) {
+      giraRuota(dy < 0 ? 1 : -1);
+      return;
+    }
+
+    if (Math.abs(dx) > soglia) {
+      giraRuota(dx < 0 ? 1 : -1);
+    }
+  };
+
+  const annullaTrascinamento = () => {
+    trascinamento.current = null;
+    trascinato.current = false;
+    setTrascinamentoAttivo(false);
+  };
+
   const inviaRisposta = async (event) => {
     event.preventDefault();
 
@@ -187,6 +391,7 @@ function QuestionBox({
       await pubblicaRisposta(domanda, testo);
 
       setRisposta("");
+      setDomandaSelezionata("");
       setMessaggio(
         "Risposta pubblicata come spotted anonimo. La trovi nel feed."
       );
@@ -363,85 +568,160 @@ function QuestionBox({
           </span>
 
           <div
-            className="question-list"
-            role="radiogroup"
-            aria-labelledby="domanda-community-label"
-          >
-            {domandeAttive.map((domanda) => (
-              <label
-                key={domanda.id}
-                className={`question-option ${
-                  domandaSelezionata === domanda.id
-                    ? "is-selected"
-                    : ""
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="domanda-community"
-                  value={domanda.id}
-                  checked={
-                    domandaSelezionata ===
-                    domanda.id
-                  }
-                  onChange={(evento) =>
-                    setDomandaSelezionata(
-                      evento.target.value
-                    )
-                  }
-                />
-
-                <span className="question-option-text">
-                  {domanda.text}
-                </span>
-
-                <span
-                  className="question-option-check"
-                  aria-hidden="true"
-                >
-                  ✓
-                </span>
-              </label>
-            ))}
-          </div>
-
-          <label htmlFor="risposta-domanda">
-            La tua risposta
-          </label>
-
-          <textarea
-            id="risposta-domanda"
-            rows="4"
-            maxLength={500}
-            value={risposta}
-            onChange={(evento) =>
-              setRisposta(evento.target.value)
-            }
-            placeholder="Scrivi qui la tua risposta anonima..."
-          />
-
-          <p className="question-publish-note">
-            🕶️ La risposta sarà pubblicata come spotted
-            anonimo, con domanda e risposta.
-          </p>
-
-          <div className="question-form-footer">
-            <span>{risposta.length}/500</span>
-
-            <button
-              type="submit"
-              className="question-submit"
-              disabled={
-                invioRisposta ||
-                !risposta.trim() ||
-                !domandaSelezionata
+            className="question-wheel-wrap"
+            onPointerEnter={(evento) => {
+              if (evento.pointerType === "mouse") {
+                setPausaRuota(true);
               }
+            }}
+            onPointerLeave={(evento) => {
+              if (evento.pointerType === "mouse") {
+                setPausaRuota(false);
+              }
+            }}
+          >
+            <div
+              className="question-wheel"
+              role="group"
+              aria-labelledby="domanda-community-label"
+              onPointerDown={iniziaTrascinamento}
+              onPointerMove={muoviTrascinamento}
+              onPointerUp={terminaTrascinamento}
+              onPointerCancel={annullaTrascinamento}
             >
-              {invioRisposta
-                ? "Pubblicazione..."
-                : "Pubblica risposta anonima"}
-            </button>
+              {domandeAttive.map(
+                (domanda, indice) => {
+                  const offset = offsetRuota(
+                    indice,
+                    indiceRuota,
+                    domandeAttive.length
+                  );
+                  const nascosta =
+                    Math.abs(offset) > 1;
+                  const selezionata =
+                    domandaSelezionata ===
+                    domanda.id;
+
+                  return (
+                    <button
+                      key={domanda.id}
+                      type="button"
+                      className={`question-wheel-card ${
+                        selezionata
+                          ? "is-selected"
+                          : ""
+                      }`}
+                      style={stileCardRuota(
+                        offset
+                      )}
+                      aria-pressed={selezionata}
+                      aria-hidden={
+                        nascosta
+                          ? "true"
+                          : undefined
+                      }
+                      tabIndex={
+                        nascosta ? -1 : 0
+                      }
+                      onClick={() =>
+                        cliccaDomanda(
+                          domanda,
+                          indice
+                        )
+                      }
+                    >
+                      <span className="question-wheel-text">
+                        {domanda.text}
+                      </span>
+                    </button>
+                  );
+                }
+              )}
+            </div>
+
+            {domandeAttive.length > 1 && (
+              <div className="question-wheel-controls">
+                <button
+                  type="button"
+                  className="question-wheel-arrow"
+                  aria-label="Domanda precedente"
+                  onClick={() => giraRuota(-1)}
+                >
+                  ↑
+                </button>
+
+                <span className="question-wheel-hint">
+                  Scorri per cambiare domanda
+                </span>
+
+                <button
+                  type="button"
+                  className="question-wheel-arrow"
+                  aria-label="Domanda successiva"
+                  onClick={() => giraRuota(1)}
+                >
+                  ↓
+                </button>
+              </div>
+            )}
           </div>
+
+          {domandaAttiva ? (
+            <div className="question-answer-area">
+              <span className="question-answer-for">
+                Rispondi a
+              </span>
+
+              <p className="question-answer-for-text">
+                “{domandaAttiva.text}”
+              </p>
+
+              <label htmlFor="risposta-domanda">
+                La tua risposta
+              </label>
+
+              <textarea
+                id="risposta-domanda"
+                rows="4"
+                maxLength={500}
+                value={risposta}
+                onChange={(evento) =>
+                  setRisposta(
+                    evento.target.value
+                  )
+                }
+                placeholder="Scrivi qui la tua risposta anonima..."
+              />
+
+              <p className="question-publish-note">
+                🕶️ La risposta sarà pubblicata come
+                spotted anonimo, con domanda e
+                risposta.
+              </p>
+
+              <div className="question-form-footer">
+                <span>{risposta.length}/500</span>
+
+                <button
+                  type="submit"
+                  className="question-submit"
+                  disabled={
+                    invioRisposta ||
+                    !risposta.trim()
+                  }
+                >
+                  {invioRisposta
+                    ? "Pubblicazione..."
+                    : "Pubblica risposta anonima"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="question-wheel-empty">
+              Tocca una domanda per scrivere la
+              risposta.
+            </p>
+          )}
         </form>
       )}
 

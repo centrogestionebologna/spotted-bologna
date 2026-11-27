@@ -1,8 +1,32 @@
 import { useState } from "react";
 import CommentSection from "./CommentSection";
+import GroupChat from "./GroupChat";
 import { scaricaImmagineSpotted } from "../utils/immagineSpotted";
 
 const linkValido = (link) => /^https?:\/\//i.test(link || "");
+
+const chiaveUtente = (utente) => utente?.id || utente?.uid || "";
+
+const nomeDaUid = (uid, utenti) => {
+  if (!uid || uid === "anonimo") {
+    return "Utente anonimo";
+  }
+
+  const utente = utenti.find(
+    (voce) => chiaveUtente(voce) === uid
+  );
+
+  return (
+    utente?.nickname ||
+    utente?.name ||
+    "Utente sconosciuto"
+  );
+};
+
+const nomiSegnalatori = (reportedBy, utenti) =>
+  (Array.isArray(reportedBy) ? reportedBy : []).map(
+    (uid) => nomeDaUid(uid, utenti)
+  );
 
 function Post({
   post,
@@ -21,10 +45,27 @@ function Post({
   toggleFollowPost,
   followRequestInProgress,
   showDownloadImage = false,
+  utenti = [],
+  nickname = "",
 }) {
   const [showLikes, setShowLikes] = useState(false);
+  const [chatAperta, setChatAperta] = useState(false);
+
+  /*
+   * Solo gli admin vedono chi ha scritto lo spotted e chi lo ha
+   * segnalato: per gli altri utenti lo spotted resta anonimo.
+   */
+  const autoreSpotted = isAdmin
+    ? nomeDaUid(post.authorId, utenti)
+    : "";
+
+  const segnalatoriSpotted = isAdmin
+    ? nomiSegnalatori(post.reportedBy, utenti)
+    : [];
 
   const isGroupProposal = post.type === "groupProposal";
+  const gruppoInterno =
+    isGroupProposal && post.groupKind === "interno";
   const isQuestionAnswer =
     post.type === "questionAnswer" ||
     Boolean(post.questionText);
@@ -125,7 +166,10 @@ const seguePost =
 
       {isGroupProposal && (
         <h3 style={{ color: "#f5c542", marginBottom: "15px" }}>
-          📚 PROPOSTA GRUPPO
+          📚{" "}
+          {gruppoInterno && post.groupName
+            ? post.groupName
+            : "PROPOSTA GRUPPO"}
         </h3>
       )}
 
@@ -148,9 +192,15 @@ const seguePost =
             <span className="post-answer-label">
               Risposta anonima
             </span>
-            <p className="post-answer-text">
-              {post.text}
-            </p>
+            {user ? (
+              <p className="post-answer-text">
+                {post.text}
+              </p>
+            ) : (
+              <p className="post-answer-locked">
+                🔒 Accedi per visualizzare la risposta
+              </p>
+            )}
           </div>
         </div>
       ) : (
@@ -172,7 +222,9 @@ const seguePost =
 
           {!user && (
             <p style={{ color: "#ffcc00", fontWeight: "bold" }}>
-              🔒 Accedi per visualizzare il link
+              {gruppoInterno
+                ? "🔒 Accedi per aprire la chat del gruppo"
+                : "🔒 Accedi per visualizzare il link"}
             </p>
           )}
 
@@ -191,7 +243,11 @@ const seguePost =
 
               {!gruppoSbloccato && !scadutoSenzaTarget && (
                 <>
-                  <p style={{ color: "#ffcc00" }}>🔒 Link nascosto</p>
+                  <p style={{ color: "#ffcc00" }}>
+                    {gruppoInterno
+                      ? "🔒 Chat nascosta"
+                      : "🔒 Link nascosto"}
+                  </p>
                   <p style={{ color: "#999" }}>
                     Servono ancora {likesMancanti} like per sbloccare il gruppo.
                   </p>
@@ -203,14 +259,24 @@ const seguePost =
                   <p style={{ color: "#4caf50", fontWeight: "bold" }}>
                     ✅ Gruppo sbloccato
                   </p>
-                  {linkValido(post.groupLink) && (
-                    <a
-                      href={post.groupLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                  {gruppoInterno ? (
+                    <button
+                      type="button"
+                      className="group-chat-open"
+                      onClick={() => setChatAperta(true)}
                     >
-                      🔗 Apri gruppo
-                    </a>
+                      💬 Apri chat del gruppo
+                    </button>
+                  ) : (
+                    linkValido(post.groupLink) && (
+                      <a
+                        href={post.groupLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        🔗 Apri gruppo
+                      </a>
+                    )
                   )}
                 </>
               )}
@@ -274,8 +340,23 @@ const seguePost =
 
       {/* Azioni admin */}
       {isAdmin && (
-        <div style={{ textAlign: "right", marginBottom: "10px" }}>
-          <button onClick={confermaElimina}>🗑 Elimina spotted</button>
+        <div style={{ marginBottom: "10px" }}>
+          <p className="post-admin-meta">
+            👤 Autore: {autoreSpotted}
+          </p>
+
+          {segnalatoriSpotted.length > 0 && (
+            <p className="post-admin-meta">
+              🚩 Segnalato da:{" "}
+              {segnalatoriSpotted.join(", ")}
+            </p>
+          )}
+
+          <div style={{ textAlign: "right" }}>
+            <button onClick={confermaElimina}>
+              🗑 Elimina spotted
+            </button>
+          </div>
         </div>
       )}
 
@@ -322,6 +403,23 @@ const seguePost =
           likes={likes}
           toggleLike={toggleLike}
           segnalaPost={segnalaPost}
+        />
+      )}
+
+      {/* Chat interna dei gruppi creati sulla piattaforma */}
+      {user &&
+        gruppoInterno &&
+        gruppoSbloccato &&
+        !scadutoDopoSblocco &&
+        chatAperta && (
+        <GroupChat
+          group={{
+            id: post.id,
+            name: post.groupName || "Gruppo"
+          }}
+          user={user}
+          nickname={nickname}
+          onClose={() => setChatAperta(false)}
         />
       )}
     </div>
