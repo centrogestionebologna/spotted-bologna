@@ -1517,16 +1517,16 @@ const salvaNickname = async () => {
 };
 
 /*
- * Chiude il passo delle notifiche salvando la frequenza scelta. Se
- * l'utente ha scelto un riepilogo, lo stesso clic attiva le push (con
- * la richiesta di permesso del browser) e invia subito la notifica di
- * prova; chi sceglie “Mai” non attiva nulla. Il fallimento non deve
- * bloccare l'ingresso nell'app: le preferenze restano modificabili dal
- * profilo e un secondo tocco su Continua entra senza push.
+ * Chiude il passo delle notifiche salvando la frequenza scelta. Lo
+ * stesso clic attiva le push (con la richiesta di permesso del browser)
+ * e invia subito la notifica di prova, qualunque riepilogo sia stato
+ * scelto: anche chi sceglie “Mai” riceve cosi' le notifiche degli
+ * spotted che segue. Il fallimento non deve bloccare l'ingresso
+ * nell'app: le preferenze restano modificabili dal profilo e un secondo
+ * tocco su Continua entra senza push.
  */
 const confermaOnboardingNotifiche = async () => {
-  const vuolePush = newsletter !== "mai";
-  const provaPush = vuolePush && !pushOnboardingFallita;
+  const provaPush = !pushOnboardingFallita;
 
   setSalvataggioNotifiche(true);
   setMessaggioPushOnboarding("");
@@ -4549,8 +4549,10 @@ return (
     </p>
 
     <p>
-      Scegliendo un riepilogo, “Continua” attiva le notifiche su questo
-      dispositivo e ti invia subito una notifica di prova.
+      “Continua” attiva le notifiche su questo dispositivo e ti invia
+      subito una notifica di prova, qualunque riepilogo tu scelga: cosi'
+      ricevi commenti e like sugli spotted che segui anche scegliendo
+      “Mai”.
     </p>
 
     {supportoPushOnboarding.iOS &&
