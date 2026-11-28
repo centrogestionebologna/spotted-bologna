@@ -5614,21 +5614,53 @@ details summary {
   line-height: 1.55;
 }
 
-/* La scena: cielo, sponde, acqua e foglie che passano. */
+/*
+ * La scena: solo acqua, dal tratto lontano alla foce. I bordi sono
+ * acqua anche loro: nessuna riva scura, solo un filo di riflesso.
+ */
 .river-scena {
   position: relative;
-  height: 320px;
+  height: 420px;
   overflow: hidden;
-  border: 1px solid rgba(103, 232, 249, 0.16);
+  border: 1px solid rgba(103, 232, 249, 0.18);
   border-radius: 18px;
   background:
+    radial-gradient(
+      120% 55% at 50% -8%,
+      rgba(103, 232, 249, 0.18),
+      transparent 62%
+    ),
+    radial-gradient(
+      90% 50% at 50% 112%,
+      rgba(244, 197, 66, 0.1),
+      transparent 72%
+    ),
     linear-gradient(
       180deg,
-      #06161d 0%,
-      #082531 44%,
-      #04161d 100%
+      #0a2e3a 0%,
+      #0b3a48 32%,
+      #072530 64%,
+      #03151c 100%
     );
   isolation: isolate;
+}
+
+.river-scena::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(165, 243, 252, 0.14),
+      transparent 10%,
+      transparent 90%,
+      rgba(165, 243, 252, 0.14)
+    );
+
+  pointer-events: none;
 }
 
 .river-cielo {
@@ -5636,103 +5668,46 @@ details summary {
   inset: 0;
   background:
     radial-gradient(
-      circle at 76% 18%,
-      rgba(165, 243, 252, 0.16),
-      transparent 34%
+      70% 44% at 50% 0%,
+      rgba(165, 243, 252, 0.24),
+      transparent 72%
     );
 }
 
-.river-luna {
-  position: absolute;
-  top: 16px;
-  right: 46px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #e9fbff;
-  box-shadow:
-    0 0 26px rgba(233, 251, 255, 0.5),
-    0 0 70px rgba(103, 232, 249, 0.28);
-  opacity: 0.85;
-}
-
+/* Scintille sull'acqua, non più lucciole nel cielo. */
 .river-lucciola {
   position: absolute;
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: #ffe9a3;
-  box-shadow: 0 0 10px 2px rgba(244, 197, 66, 0.55);
+  background: #fff6d6;
+  box-shadow: 0 0 10px 2px rgba(244, 197, 66, 0.45);
   animation: river-lucciola 7s ease-in-out infinite;
 }
 
 .river-lucciola-a {
-  top: 42px;
-  left: 18%;
+  top: 24%;
+  left: 16%;
 }
 
 .river-lucciola-b {
-  top: 78px;
-  left: 46%;
+  top: 46%;
+  left: 38%;
   animation-delay: -2.4s;
   animation-duration: 9s;
 }
 
 .river-lucciola-c {
-  top: 30px;
-  left: 66%;
+  top: 32%;
+  left: 78%;
   animation-delay: -4.1s;
   animation-duration: 11s;
 }
 
-/* Sponde scure ai lati, come rive di notte. */
-.river-sponda {
-  position: absolute;
-  bottom: 0;
-  z-index: 2;
-  width: 16%;
-  height: 74%;
-  pointer-events: none;
-}
-
-.river-sponda-sx {
-  left: -2%;
-  border-radius: 0 70% 0 0;
-  background:
-    radial-gradient(
-      ellipse at 20% 100%,
-      rgba(3, 14, 18, 0.98) 0%,
-      rgba(3, 14, 18, 0.92) 48%,
-      transparent 72%
-    ),
-    repeating-linear-gradient(
-      82deg,
-      rgba(9, 32, 26, 0.95) 0 2px,
-      transparent 2px 13px
-    );
-}
-
-.river-sponda-dx {
-  right: -2%;
-  border-radius: 70% 0 0 0;
-  background:
-    radial-gradient(
-      ellipse at 80% 100%,
-      rgba(3, 14, 18, 0.98) 0%,
-      rgba(3, 14, 18, 0.9) 46%,
-      transparent 72%
-    ),
-    repeating-linear-gradient(
-      98deg,
-      rgba(9, 32, 26, 0.9) 0 2px,
-      transparent 2px 14px
-    );
-}
-
 /*
  * L'acqua: la corrente scende dall'alto verso il basso, dal tratto
- * lontano (più chiaro, sotto la luna) fino alla foce in basso.
- * Tre nastri di luce verticali scorrono a velocità diverse.
+ * lontano e luminoso fino alla foce scura in basso. Tre nastri di
+ * luce verticali scorrono a velocità diverse.
  */
 .river-acqua {
   position: absolute;
@@ -5741,10 +5716,32 @@ details summary {
   background:
     linear-gradient(
       180deg,
-      rgba(8, 38, 48, 0.6) 0%,
-      rgba(9, 46, 58, 0.9) 40%,
-      #04161d 100%
+      rgba(10, 51, 64, 0) 0%,
+      rgba(6, 32, 41, 0.4) 52%,
+      rgba(3, 19, 26, 0.82) 100%
     );
+}
+
+/* Controluce caldo sulla corrente, al posto della luna. */
+.river-riflesso {
+  position: absolute;
+  top: -6%;
+  left: 50%;
+  width: 76%;
+  height: 36%;
+
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(255, 243, 205, 0.2) 0%,
+      rgba(103, 232, 249, 0.16) 44%,
+      transparent 74%
+    );
+
+  filter: blur(16px);
+  transform: translateX(-50%);
+  animation: river-respiro 9s ease-in-out infinite;
 }
 
 .river-onda {
@@ -5755,65 +5752,73 @@ details summary {
   height: 180%;
   background:
     repeating-linear-gradient(
-      176deg,
+      174deg,
       transparent 0 12px,
-      rgba(165, 243, 252, 0.28) 12px 14px,
+      rgba(165, 243, 252, 0.24) 12px 14px,
       transparent 14px 30px
     );
-  filter: blur(1.2px);
-  opacity: 0.5;
+  filter: blur(1.4px);
+  mix-blend-mode: screen;
+  opacity: 0.42;
   animation: river-scorrere 11s linear infinite;
 }
 
 .river-onda-a {
-  opacity: 0.5;
+  opacity: 0.42;
   animation-duration: 9s;
 }
 
 .river-onda-b {
-  opacity: 0.3;
+  opacity: 0.26;
   animation-duration: 15s;
   background:
     repeating-linear-gradient(
       184deg,
       transparent 0 16px,
-      rgba(244, 197, 66, 0.3) 16px 17px,
+      rgba(244, 197, 66, 0.28) 16px 17px,
       transparent 17px 34px
     );
 }
 
 .river-onda-c {
-  opacity: 0.2;
+  opacity: 0.16;
   animation-duration: 21s;
 }
 
-/* Foschia sulla foce, in basso: le foglie si dissolvono lì. */
+/* Foschia sulla foce, in basso: le foglie ci entrano piano. */
 .river-brume {
   position: absolute;
+  top: 62%;
   right: 0;
   bottom: 0;
   left: 0;
   z-index: 4;
-  height: 18%;
+
   background:
     linear-gradient(
       0deg,
-      rgba(6, 26, 34, 0.95),
-      rgba(6, 26, 34, 0.7) 60%,
+      rgba(4, 17, 23, 0.9),
+      rgba(5, 23, 30, 0.45) 46%,
+      rgba(6, 26, 34, 0.12) 78%,
       transparent
     );
+
   pointer-events: none;
 }
 
-/* Le foglie-messaggio: scendono dalla sorgente alla foce. */
+/*
+ * Le foglie-messaggio: partono dalla sorgente, galleggiano piano per
+ * tutti i dieci secondi e vengono portate via fino alla foce. Restano
+ * sempre leggibili: niente dissolvenze.
+ */
 .river-foglia {
   position: absolute;
-  top: -16%;
+  top: 8%;
   left: 50%;
   z-index: 3;
-  translate: -50% 0;
+  translate: -50% var(--river-salto, 0px);
   animation: river-corsa 10s linear forwards;
-  will-change: top, opacity, scale;
+  will-change: top, scale;
   pointer-events: none;
 }
 
@@ -5821,7 +5826,7 @@ details summary {
   display: flex;
   align-items: center;
   gap: 7px;
-  max-width: min(320px, 52vw);
+  max-width: min(300px, 48vw);
   padding: 7px 14px 7px 10px;
   border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 999px 999px 999px 8px;
@@ -5940,22 +5945,19 @@ details summary {
 
 @keyframes river-corsa {
   0% {
-    top: -16%;
-    opacity: 0;
-    scale: 0.66;
+    top: 6%;
+    scale: 0.96;
   }
 
-  7% {
-    opacity: 1;
+  /* Il primo tratto è lento: la foglia galleggia. */
+  60% {
+    top: 34%;
+    scale: 1;
   }
 
-  94% {
-    opacity: 1;
-  }
-
+  /* Poi la corrente la prende e la porta fino alla foce. */
   100% {
     top: 100%;
-    opacity: 0;
     scale: 1.02;
   }
 }
@@ -6007,7 +6009,7 @@ details summary {
 
 @media (max-width: 640px) {
   .river-scena {
-    height: 250px;
+    height: 330px;
     border-radius: 16px;
   }
 
@@ -6017,7 +6019,7 @@ details summary {
   }
 
   .river-foglia-corpo {
-    max-width: min(240px, 52vw);
+    max-width: min(220px, 48vw);
     padding: 6px 12px 6px 9px;
     font-size: 12px;
   }
@@ -6129,7 +6131,7 @@ details summary {
 }
 
 .river-scena.is-piena .river-brume {
-  height: 22%;
+  top: 54%;
 }
 
 /* In piena l'acqua in testa si illumina e respira. */

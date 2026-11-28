@@ -113,13 +113,15 @@ const hashTesto = (valore) => {
  */
 const stileFoglia = (id) => {
   const hash = hashTesto(id);
-  const corsie = [34, 46, 58, 70];
+  const corsie = [26, 36, 46, 56, 66, 74];
   const corsia = corsie[hash % corsie.length];
-  const scarto = (hash % 5) - 2;
+  const scarto = (hash % 3) - 1;
   const rotazione = ((hash % 11) - 5) * 0.6;
 
   return {
     corsia: corsia + scarto,
+    /* Uno scarto verticale evita che due foglie si accavallino. */
+    salto: (hash % 7) * 10,
     rotazione,
     glifo: GLIFI[hash % GLIFI.length]
   };
@@ -648,9 +650,10 @@ function RiverChat({ user, isAdmin = false }) {
 
       <p className="river-intro">
         Una chat che non resta. Scrivi quello che ti passa per la
-        testa e affidalo alla corrente: la foglia scende dall'alto,
-        resta in acqua dieci secondi e poi non esiste più. Nessuno
-        può rileggerla, nemmeno tu. Puoi lanciarne quante vuoi. Le
+        testa e affidalo alla corrente: la foglia scende piano e
+        resta sullo schermo dieci secondi, poi non esiste più.
+        Nessuno può rileggerla, nemmeno tu. Puoi scriverne quante
+        vuoi, una dopo l'altra: ognuna scende per conto suo. Le
         foglie con link o pubblicità affondano come sassi.
       </p>
 
@@ -661,16 +664,13 @@ function RiverChat({ user, isAdmin = false }) {
         aria-label="Messaggi che scorrono nel fiume"
       >
         <div className="river-cielo" aria-hidden="true">
-          <span className="river-luna" />
           <span className="river-lucciola river-lucciola-a" />
           <span className="river-lucciola river-lucciola-b" />
           <span className="river-lucciola river-lucciola-c" />
         </div>
 
-        <div className="river-sponda river-sponda-sx" aria-hidden="true" />
-        <div className="river-sponda river-sponda-dx" aria-hidden="true" />
-
         <div className="river-acqua" aria-hidden="true">
+          <span className="river-riflesso" />
           <span className="river-onda river-onda-a" />
           <span className="river-onda river-onda-b" />
           <span className="river-onda river-onda-c" />
@@ -691,6 +691,7 @@ function RiverChat({ user, isAdmin = false }) {
               className="river-foglia"
               style={{
                 left: `${stile.corsia}%`,
+                "--river-salto": `${stile.salto}px`,
                 animationDelay: `-${secondi}s`
               }}
             >
