@@ -4685,7 +4685,7 @@ return (
   pubblicaRisposta={pubblicaRispostaDomanda}
 />
 
-<RiverChat user={user} />
+<RiverChat user={user} isAdmin={isAdmin} />
 
 {user && mostraPropostaGruppo && (
 <div

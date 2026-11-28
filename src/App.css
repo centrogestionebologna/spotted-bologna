@@ -5617,7 +5617,7 @@ details summary {
 /* La scena: cielo, sponde, acqua e foglie che passano. */
 .river-scena {
   position: relative;
-  height: 232px;
+  height: 320px;
   overflow: hidden;
   border: 1px solid rgba(103, 232, 249, 0.16);
   border-radius: 18px;
@@ -5729,50 +5729,53 @@ details summary {
     );
 }
 
-/* L'acqua: tre nastri di luce che scorrono a velocità diverse. */
+/*
+ * L'acqua: la corrente scende dall'alto verso il basso, dal tratto
+ * lontano (più chiaro, sotto la luna) fino alla foce in basso.
+ * Tre nastri di luce verticali scorrono a velocità diverse.
+ */
 .river-acqua {
   position: absolute;
-  inset: 40% 0 0;
+  inset: 0;
   overflow: hidden;
   background:
     linear-gradient(
       180deg,
-      rgba(103, 232, 249, 0.14) 0%,
-      rgba(9, 46, 58, 0.9) 42%,
+      rgba(8, 38, 48, 0.6) 0%,
+      rgba(9, 46, 58, 0.9) 40%,
       #04161d 100%
     );
 }
 
 .river-onda {
   position: absolute;
-  left: -30%;
-  width: 160%;
-  height: 46%;
+  top: -40%;
+  left: 0;
+  width: 100%;
+  height: 180%;
   background:
     repeating-linear-gradient(
-      96deg,
+      176deg,
       transparent 0 12px,
       rgba(165, 243, 252, 0.28) 12px 14px,
       transparent 14px 30px
     );
   filter: blur(1.2px);
-  opacity: 0.55;
+  opacity: 0.5;
   animation: river-scorrere 11s linear infinite;
 }
 
 .river-onda-a {
-  top: 4%;
+  opacity: 0.5;
   animation-duration: 9s;
 }
 
 .river-onda-b {
-  top: 34%;
-  opacity: 0.32;
+  opacity: 0.3;
   animation-duration: 15s;
-  animation-direction: reverse;
   background:
     repeating-linear-gradient(
-      84deg,
+      184deg,
       transparent 0 16px,
       rgba(244, 197, 66, 0.3) 16px 17px,
       transparent 17px 34px
@@ -5780,36 +5783,37 @@ details summary {
 }
 
 .river-onda-c {
-  top: 62%;
-  opacity: 0.22;
+  opacity: 0.2;
   animation-duration: 21s;
 }
 
-/* Foschia sulla foce: le foglie si dissolvono lì. */
+/* Foschia sulla foce, in basso: le foglie si dissolvono lì. */
 .river-brume {
   position: absolute;
-  top: 0;
   right: 0;
   bottom: 0;
+  left: 0;
   z-index: 4;
-  width: 18%;
+  height: 18%;
   background:
     linear-gradient(
-      90deg,
-      transparent,
-      rgba(6, 26, 34, 0.75) 70%,
-      rgba(6, 26, 34, 0.95)
+      0deg,
+      rgba(6, 26, 34, 0.95),
+      rgba(6, 26, 34, 0.7) 60%,
+      transparent
     );
   pointer-events: none;
 }
 
-/* Le foglie-messaggio. */
+/* Le foglie-messaggio: scendono dalla sorgente alla foce. */
 .river-foglia {
   position: absolute;
-  left: -40%;
+  top: -16%;
+  left: 50%;
   z-index: 3;
+  translate: -50% 0;
   animation: river-corsa 10s linear forwards;
-  will-change: left, opacity;
+  will-change: top, opacity, scale;
   pointer-events: none;
 }
 
@@ -5817,7 +5821,7 @@ details summary {
   display: flex;
   align-items: center;
   gap: 7px;
-  max-width: min(330px, 62vw);
+  max-width: min(320px, 52vw);
   padding: 7px 14px 7px 10px;
   border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 999px 999px 999px 8px;
@@ -5936,21 +5940,23 @@ details summary {
 
 @keyframes river-corsa {
   0% {
-    left: -40%;
+    top: -16%;
     opacity: 0;
+    scale: 0.66;
   }
 
-  6% {
+  7% {
     opacity: 1;
   }
 
-  82% {
+  94% {
     opacity: 1;
   }
 
   100% {
-    left: 104%;
+    top: 100%;
     opacity: 0;
+    scale: 1.02;
   }
 }
 
@@ -5967,11 +5973,11 @@ details summary {
 
 @keyframes river-scorrere {
   from {
-    transform: translateX(0);
+    transform: translateY(-8%);
   }
 
   to {
-    transform: translateX(18%);
+    transform: translateY(8%);
   }
 }
 
@@ -6001,7 +6007,7 @@ details summary {
 
 @media (max-width: 640px) {
   .river-scena {
-    height: 198px;
+    height: 250px;
     border-radius: 16px;
   }
 
@@ -6011,7 +6017,7 @@ details summary {
   }
 
   .river-foglia-corpo {
-    max-width: min(270px, 68vw);
+    max-width: min(240px, 52vw);
     padding: 6px 12px 6px 9px;
     font-size: 12px;
   }
@@ -6097,19 +6103,16 @@ details summary {
 
 /* Piena: l'acqua sale e la corrente si fa più veloce. */
 .river-acqua {
-  transition:
-    top 0.9s ease,
-    background 0.9s ease;
+  transition: background 0.9s ease;
 }
 
 .river-scena.is-piena .river-acqua {
-  top: 24%;
   background:
     linear-gradient(
       180deg,
-      rgba(103, 232, 249, 0.24) 0%,
-      rgba(9, 58, 72, 0.95) 40%,
-      #04161d 100%
+      rgba(165, 243, 252, 0.18) 0%,
+      rgba(12, 74, 92, 0.92) 38%,
+      #061e28 100%
     );
 }
 
@@ -6126,28 +6129,26 @@ details summary {
 }
 
 .river-scena.is-piena .river-brume {
-  width: 24%;
+  height: 22%;
 }
 
+/* In piena l'acqua in testa si illumina e respira. */
 .river-scena.is-piena::after {
   content: "";
   position: absolute;
-  top: 24%;
-  right: 0;
-  left: 0;
+  inset: 0;
   z-index: 2;
-  height: 16px;
 
   background:
     linear-gradient(
       180deg,
-      rgba(233, 251, 255, 0.35),
-      transparent
+      rgba(233, 251, 255, 0.2),
+      transparent 46%
     );
 
-  filter: blur(2px);
-  opacity: 0.7;
+  opacity: 0.8;
   pointer-events: none;
+  animation: river-respiro 3s ease-in-out infinite;
 }
 
 /* I sassi: foglie rifiutate che affondano subito. */

@@ -107,12 +107,15 @@ const hashTesto = (valore) => {
   return hash;
 };
 
-/* Corsia, inclinazione e ritardo visivo: la corrente non è mai dritta. */
+/*
+ * Corsia, inclinazione e ritardo visivo: la corrente scende dall'alto
+ * verso il basso e non è mai dritta.
+ */
 const stileFoglia = (id) => {
   const hash = hashTesto(id);
-  const corsie = [14, 32, 50, 68];
+  const corsie = [34, 46, 58, 70];
   const corsia = corsie[hash % corsie.length];
-  const scarto = (hash % 7) - 3;
+  const scarto = (hash % 5) - 2;
   const rotazione = ((hash % 11) - 5) * 0.6;
 
   return {
@@ -140,7 +143,7 @@ const chiaveTesto = (testo) =>
     .trim()
     .toLowerCase();
 
-function RiverChat({ user }) {
+function RiverChat({ user, isAdmin = false }) {
   const [messaggi, setMessaggi] = useState([]);
   const [adesso, setAdesso] = useState(() => Date.now());
   const [testo, setTesto] = useState("");
@@ -259,6 +262,12 @@ function RiverChat({ user }) {
    * fiume: da lì può diventare uno spotted, mai pubblicato da solo.
    */
   useEffect(() => {
+    /* La memoria è roba da amministratori: per gli altri non esiste. */
+    if (!isAdmin) {
+      visteRef.current.clear();
+      return;
+    }
+
     const presenti = new Set(
       visibili.map((messaggio) => messaggio.id)
     );
@@ -294,7 +303,7 @@ function RiverChat({ user }) {
 
       return senzaDoppioni.slice(0, MEMORIA_MASSIMA);
     });
-  }, [visibili]);
+  }, [visibili, isAdmin]);
 
   /* Chiudo il fiume sonoro quando la card sparisce. */
   useEffect(() => {
@@ -444,18 +453,6 @@ function RiverChat({ user }) {
     }
   };
 
-  const mioUltimo = visibili.find(
-    (messaggio) =>
-      messaggio.clientId === clientIdRef.current
-  );
-
-  const attesa = mioUltimo
-    ? Math.max(
-        0,
-        Math.ceil((DURATA - mioUltimo.eta) / 1000)
-      )
-    : 0;
-
   const piena = visibili.length >= SOGLIA_PIENA;
 
   const inviaMessaggio = async (evento) => {
@@ -463,7 +460,7 @@ function RiverChat({ user }) {
 
     const pulito = testo.trim().slice(0, CARATTERI_MASSIMI);
 
-    if (!pulito || invio || attesa > 0) {
+    if (!pulito || invio) {
       return;
     }
 
@@ -542,6 +539,10 @@ function RiverChat({ user }) {
    * pending, nessuna foglia viene pubblicata da sola.
    */
   const mandaInPending = async (voce) => {
+    if (!isAdmin) {
+      return;
+    }
+
     if (
       inviate[voce.id] === "invio" ||
       inviate[voce.id] === "fatto"
@@ -647,10 +648,10 @@ function RiverChat({ user }) {
 
       <p className="river-intro">
         Una chat che non resta. Scrivi quello che ti passa per la
-        testa e affidalo alla corrente: la tua foglia scivola via e
-        dopo dieci secondi non esiste più. Nessuno può rileggerla,
-        nemmeno tu. Le foglie con link o pubblicità affondano come
-        sassi.
+        testa e affidalo alla corrente: la foglia scende dall'alto,
+        resta in acqua dieci secondi e poi non esiste più. Nessuno
+        può rileggerla, nemmeno tu. Puoi lanciarne quante vuoi. Le
+        foglie con link o pubblicità affondano come sassi.
       </p>
 
       <div
@@ -689,7 +690,7 @@ function RiverChat({ user }) {
               key={messaggio.id}
               className="river-foglia"
               style={{
-                top: `${stile.corsia}%`,
+                left: `${stile.corsia}%`,
                 animationDelay: `-${secondi}s`
               }}
             >
@@ -757,13 +758,9 @@ function RiverChat({ user }) {
         <button
           type="submit"
           className="river-invia"
-          disabled={invio || attesa > 0 || !testo.trim()}
+          disabled={invio || !testo.trim()}
         >
-          {attesa > 0
-            ? `Galleggia… ${attesa}s`
-            : invio
-            ? "…"
-            : "Lascia andare 🌿"}
+          {invio ? "…" : "Lascia andare 🌿"}
         </button>
       </form>
 
@@ -777,89 +774,94 @@ function RiverChat({ user }) {
         </span>
 
         <span className="river-nota">
-          Una foglia ogni 10 secondi · anonima
+          Foglie anonime · dieci secondi in acqua
         </span>
       </div>
 
-      <div className="river-memoria">
-        <button
-          type="button"
-          className="river-memoria-toggle"
-          aria-expanded={memoriaAperta}
-          onClick={() =>
-            setMemoriaAperta((aperta) => !aperta)
-          }
-        >
-          🫧 Memoria del fiume
-          {memoria.length > 0 && (
-            <span className="river-memoria-conteggio">
-              {memoria.length}
-            </span>
-          )}
-          <span className="river-memoria-freccia">
-            {memoriaAperta ? "▾" : "▸"}
-          </span>
-        </button>
-
-        {memoriaAperta && (
-          <div className="river-memoria-corpo">
-            <p className="river-memoria-nota">
-              Le foglie appena passate. Se una merita di
-              restare, mandala come spotted: finisce sempre in
-              approvazione, mai online da sola.
-            </p>
-
-            {memoria.length === 0 ? (
-              <p className="river-memoria-vuoto">
-                Il fiume non ricorda ancora niente.
-              </p>
-            ) : (
-              <ul className="river-memoria-lista">
-                {memoria.map((voce) => {
-                  const stato = inviate[voce.id] || "";
-
-                  return (
-                    <li
-                      key={voce.id}
-                      className="river-memoria-voce"
-                    >
-                      <p className="river-memoria-testo">
-                        {voce.text}
-                      </p>
-
-                      <button
-                        type="button"
-                        className={`river-memoria-azione${
-                          stato === "fatto"
-                            ? " is-fatto"
-                            : ""
-                        }${
-                          stato === "errore"
-                            ? " is-errore"
-                            : ""
-                        }`}
-                        disabled={
-                          stato === "invio" ||
-                          stato === "fatto"
-                        }
-                        onClick={() => mandaInPending(voce)}
-                      >
-                        {stato === "fatto"
-                          ? "In approvazione ✓"
-                          : stato === "invio"
-                          ? "Invio…"
-                          : stato === "errore"
-                          ? "Riprova"
-                          : "📩 Spotted"}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+      {isAdmin && (
+        <div className="river-memoria">
+          <button
+            type="button"
+            className="river-memoria-toggle"
+            aria-expanded={memoriaAperta}
+            onClick={() =>
+              setMemoriaAperta((aperta) => !aperta)
+            }
+          >
+            🫧 Memoria del fiume
+            {memoria.length > 0 && (
+              <span className="river-memoria-conteggio">
+                {memoria.length}
+              </span>
             )}
-          </div>
-        )}
-      </div>
+            <span className="river-memoria-freccia">
+              {memoriaAperta ? "▾" : "▸"}
+            </span>
+          </button>
+
+          {memoriaAperta && (
+            <div className="river-memoria-corpo">
+              <p className="river-memoria-nota">
+                Solo gli admin vedono questa memoria. Le foglie
+                appena passate si possono mandare come spotted:
+                finiscono sempre in approvazione, mai online da
+                sole.
+              </p>
+
+              {memoria.length === 0 ? (
+                <p className="river-memoria-vuoto">
+                  Il fiume non ricorda ancora niente.
+                </p>
+              ) : (
+                <ul className="river-memoria-lista">
+                  {memoria.map((voce) => {
+                    const stato = inviate[voce.id] || "";
+
+                    return (
+                      <li
+                        key={voce.id}
+                        className="river-memoria-voce"
+                      >
+                        <p className="river-memoria-testo">
+                          {voce.text}
+                        </p>
+
+                        <button
+                          type="button"
+                          className={`river-memoria-azione${
+                            stato === "fatto"
+                              ? " is-fatto"
+                              : ""
+                          }${
+                            stato === "errore"
+                              ? " is-errore"
+                              : ""
+                          }`}
+                          disabled={
+                            stato === "invio" ||
+                            stato === "fatto"
+                          }
+                          onClick={() =>
+                            mandaInPending(voce)
+                          }
+                        >
+                          {stato === "fatto"
+                            ? "In approvazione ✓"
+                            : stato === "invio"
+                            ? "Invio…"
+                            : stato === "errore"
+                            ? "Riprova"
+                            : "📩 Spotted"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {avviso && (
         <p className="river-avviso" role="status">
