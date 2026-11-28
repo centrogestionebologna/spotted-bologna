@@ -9,6 +9,7 @@ import Post from "./components/Post";
 import NicknameSettings from "./components/NicknameSettings";
 import NotificationSettings from "./components/NotificationSettings";
 import QuestionBox from "./components/QuestionBox";
+import RiverChat from "./components/RiverChat";
 
 import "./App.css";
 
@@ -4683,6 +4684,8 @@ return (
   nickname={savedNickname}
   pubblicaRisposta={pubblicaRispostaDomanda}
 />
+
+<RiverChat user={user} />
 
 {user && mostraPropostaGruppo && (
 <div

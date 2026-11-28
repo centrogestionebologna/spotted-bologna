@@ -5549,3 +5549,842 @@ details summary {
     padding-right: 13px;
   }
 }
+
+/* ---------------------------------------------------------------
+   Il Fiume: chat effimera, le foglie scorrono e svaniscono in 10s
+   --------------------------------------------------------------- */
+
+.river-card {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(103, 232, 249, 0.26);
+  background:
+    radial-gradient(
+      circle at 88% -10%,
+      rgba(103, 232, 249, 0.14),
+      transparent 46%
+    ),
+    radial-gradient(
+      circle at 4% 104%,
+      rgba(244, 197, 66, 0.08),
+      transparent 40%
+    ),
+    #0a161c;
+}
+
+.river-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.river-head h2 {
+  margin: 0;
+  color: #a5f3fc;
+}
+
+.river-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.river-badge {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid rgba(244, 197, 66, 0.4);
+  border-radius: 999px;
+  background: rgba(244, 197, 66, 0.1);
+  color: #f4d77a;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.river-intro {
+  max-width: 660px;
+  margin: 10px 0 16px;
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* La scena: cielo, sponde, acqua e foglie che passano. */
+.river-scena {
+  position: relative;
+  height: 232px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      180deg,
+      #06161d 0%,
+      #082531 44%,
+      #04161d 100%
+    );
+  isolation: isolate;
+}
+
+.river-cielo {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at 76% 18%,
+      rgba(165, 243, 252, 0.16),
+      transparent 34%
+    );
+}
+
+.river-luna {
+  position: absolute;
+  top: 16px;
+  right: 46px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #e9fbff;
+  box-shadow:
+    0 0 26px rgba(233, 251, 255, 0.5),
+    0 0 70px rgba(103, 232, 249, 0.28);
+  opacity: 0.85;
+}
+
+.river-lucciola {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ffe9a3;
+  box-shadow: 0 0 10px 2px rgba(244, 197, 66, 0.55);
+  animation: river-lucciola 7s ease-in-out infinite;
+}
+
+.river-lucciola-a {
+  top: 42px;
+  left: 18%;
+}
+
+.river-lucciola-b {
+  top: 78px;
+  left: 46%;
+  animation-delay: -2.4s;
+  animation-duration: 9s;
+}
+
+.river-lucciola-c {
+  top: 30px;
+  left: 66%;
+  animation-delay: -4.1s;
+  animation-duration: 11s;
+}
+
+/* Sponde scure ai lati, come rive di notte. */
+.river-sponda {
+  position: absolute;
+  bottom: 0;
+  z-index: 2;
+  width: 16%;
+  height: 74%;
+  pointer-events: none;
+}
+
+.river-sponda-sx {
+  left: -2%;
+  border-radius: 0 70% 0 0;
+  background:
+    radial-gradient(
+      ellipse at 20% 100%,
+      rgba(3, 14, 18, 0.98) 0%,
+      rgba(3, 14, 18, 0.92) 48%,
+      transparent 72%
+    ),
+    repeating-linear-gradient(
+      82deg,
+      rgba(9, 32, 26, 0.95) 0 2px,
+      transparent 2px 13px
+    );
+}
+
+.river-sponda-dx {
+  right: -2%;
+  border-radius: 70% 0 0 0;
+  background:
+    radial-gradient(
+      ellipse at 80% 100%,
+      rgba(3, 14, 18, 0.98) 0%,
+      rgba(3, 14, 18, 0.9) 46%,
+      transparent 72%
+    ),
+    repeating-linear-gradient(
+      98deg,
+      rgba(9, 32, 26, 0.9) 0 2px,
+      transparent 2px 14px
+    );
+}
+
+/* L'acqua: tre nastri di luce che scorrono a velocità diverse. */
+.river-acqua {
+  position: absolute;
+  inset: 40% 0 0;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(103, 232, 249, 0.14) 0%,
+      rgba(9, 46, 58, 0.9) 42%,
+      #04161d 100%
+    );
+}
+
+.river-onda {
+  position: absolute;
+  left: -30%;
+  width: 160%;
+  height: 46%;
+  background:
+    repeating-linear-gradient(
+      96deg,
+      transparent 0 12px,
+      rgba(165, 243, 252, 0.28) 12px 14px,
+      transparent 14px 30px
+    );
+  filter: blur(1.2px);
+  opacity: 0.55;
+  animation: river-scorrere 11s linear infinite;
+}
+
+.river-onda-a {
+  top: 4%;
+  animation-duration: 9s;
+}
+
+.river-onda-b {
+  top: 34%;
+  opacity: 0.32;
+  animation-duration: 15s;
+  animation-direction: reverse;
+  background:
+    repeating-linear-gradient(
+      84deg,
+      transparent 0 16px,
+      rgba(244, 197, 66, 0.3) 16px 17px,
+      transparent 17px 34px
+    );
+}
+
+.river-onda-c {
+  top: 62%;
+  opacity: 0.22;
+  animation-duration: 21s;
+}
+
+/* Foschia sulla foce: le foglie si dissolvono lì. */
+.river-brume {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 18%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(6, 26, 34, 0.75) 70%,
+      rgba(6, 26, 34, 0.95)
+    );
+  pointer-events: none;
+}
+
+/* Le foglie-messaggio. */
+.river-foglia {
+  position: absolute;
+  left: -40%;
+  z-index: 3;
+  animation: river-corsa 10s linear forwards;
+  will-change: left, opacity;
+  pointer-events: none;
+}
+
+.river-foglia-corpo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: min(330px, 62vw);
+  padding: 7px 14px 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px 999px 999px 8px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(240, 253, 255, 0.97),
+      rgba(186, 244, 252, 0.9)
+    );
+  color: #062a33;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.4),
+    0 0 24px rgba(103, 232, 249, 0.22);
+  transform: rotate(var(--river-rot, 0deg));
+  animation: river-dondolare 4.2s ease-in-out infinite;
+  overflow-wrap: anywhere;
+}
+
+.river-foglia-glifo {
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.river-foglia-testo {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.river-vuoto {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  margin: 0;
+  padding: 0 16px;
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: river-respiro 5s ease-in-out infinite;
+}
+
+/* Riva da cui si lancia il messaggio. */
+.river-composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.river-input {
+  flex: 1;
+  width: auto;
+  margin: 0;
+  padding: 12px 16px;
+  border-color: rgba(103, 232, 249, 0.24);
+  border-radius: 999px;
+  background: #07151b;
+  font-size: 14px;
+}
+
+.river-input:focus {
+  border-color: #67e8f9;
+  box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12);
+}
+
+.river-invia {
+  flex: 0 0 auto;
+  padding: 11px 18px;
+  border: 1px solid rgba(165, 243, 252, 0.5);
+  background:
+    linear-gradient(135deg, #a5f3fc, #22d3ee);
+  color: #04222b;
+  font-size: 13.5px;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(34, 211, 238, 0.18);
+}
+
+.river-invia:disabled {
+  cursor: default;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.river-piede {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.river-conteggio {
+  color: #a5f3fc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.river-nota {
+  color: #64748b;
+  font-size: 11.5px;
+}
+
+.river-errore {
+  margin-top: 10px;
+  color: #fca5a5;
+  font-size: 12.5px;
+}
+
+@keyframes river-corsa {
+  0% {
+    left: -40%;
+    opacity: 0;
+  }
+
+  6% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+  }
+
+  100% {
+    left: 104%;
+    opacity: 0;
+  }
+}
+
+@keyframes river-dondolare {
+  0%,
+  100% {
+    transform: translateY(-3px) rotate(var(--river-rot, 0deg));
+  }
+
+  50% {
+    transform: translateY(3px) rotate(calc(var(--river-rot, 0deg) * -0.6));
+  }
+}
+
+@keyframes river-scorrere {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(18%);
+  }
+}
+
+@keyframes river-lucciola {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translate3d(0, 0, 0) scale(0.8);
+  }
+
+  50% {
+    opacity: 0.95;
+    transform: translate3d(6px, -10px, 0) scale(1.1);
+  }
+}
+
+@keyframes river-respiro {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (max-width: 640px) {
+  .river-scena {
+    height: 198px;
+    border-radius: 16px;
+  }
+
+  .river-intro {
+    font-size: 13.5px;
+    margin-bottom: 12px;
+  }
+
+  .river-foglia-corpo {
+    max-width: min(270px, 68vw);
+    padding: 6px 12px 6px 9px;
+    font-size: 12px;
+  }
+
+  .river-composer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .river-invia {
+    width: 100%;
+  }
+
+  .river-piede {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .river-onda,
+  .river-lucciola,
+  .river-foglia-corpo,
+  .river-vuoto {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Il Fiume: suono, piena, sassi e memoria
+   --------------------------------------------------------------- */
+
+.river-head-azioni {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.river-suono {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+
+  border: 1px solid rgba(103, 232, 249, 0.3);
+  border-radius: 999px;
+  background: rgba(7, 21, 27, 0.8);
+
+  color: #a5f3fc;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+
+  transition:
+    border-color 0.25s ease,
+    background 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.river-suono:hover {
+  border-color: rgba(165, 243, 252, 0.65);
+}
+
+.river-suono.is-on {
+  border-color: rgba(244, 197, 66, 0.6);
+  background: rgba(244, 197, 66, 0.14);
+  color: #f4d77a;
+  box-shadow: 0 0 18px rgba(244, 197, 66, 0.22);
+}
+
+.river-badge.is-piena {
+  border-color: rgba(34, 211, 238, 0.7);
+  background: rgba(34, 211, 238, 0.18);
+  color: #cffafe;
+  animation: river-respiro 2.4s ease-in-out infinite;
+}
+
+/* Piena: l'acqua sale e la corrente si fa più veloce. */
+.river-acqua {
+  transition:
+    top 0.9s ease,
+    background 0.9s ease;
+}
+
+.river-scena.is-piena .river-acqua {
+  top: 24%;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(103, 232, 249, 0.24) 0%,
+      rgba(9, 58, 72, 0.95) 40%,
+      #04161d 100%
+    );
+}
+
+.river-scena.is-piena .river-onda-a {
+  animation-duration: 5.5s;
+}
+
+.river-scena.is-piena .river-onda-b {
+  animation-duration: 9s;
+}
+
+.river-scena.is-piena .river-onda-c {
+  animation-duration: 13s;
+}
+
+.river-scena.is-piena .river-brume {
+  width: 24%;
+}
+
+.river-scena.is-piena::after {
+  content: "";
+  position: absolute;
+  top: 24%;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 16px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(233, 251, 255, 0.35),
+      transparent
+    );
+
+  filter: blur(2px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* I sassi: foglie rifiutate che affondano subito. */
+.river-sasso {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  z-index: 5;
+
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: min(300px, 70vw);
+  padding: 6px 13px 6px 10px;
+
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px 999px 8px 999px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(71, 85, 105, 0.95),
+      rgba(30, 41, 59, 0.95)
+    );
+
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+
+  transform: translate(-50%, 0);
+  animation: river-affondo 3.4s
+    cubic-bezier(0.4, 0.05, 0.7, 0.4) forwards;
+  pointer-events: none;
+}
+
+.river-sasso-glifo {
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.river-sasso-testo {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@keyframes river-affondo {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -18px) scale(0.96);
+  }
+
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  70% {
+    opacity: 0.85;
+    transform: translate(-50%, 22px) rotate(-2deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 46px) rotate(-4deg) scale(0.9);
+  }
+}
+
+.river-avviso {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+
+  border-left: 2px solid rgba(244, 197, 66, 0.6);
+  border-radius: 0 10px 10px 0;
+  background: rgba(244, 197, 66, 0.09);
+
+  color: #f4d77a;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Memoria del fiume: le foglie passate, con la strada del pending. */
+.river-memoria {
+  margin-top: 14px;
+  padding-top: 10px;
+
+  border-top: 1px solid rgba(103, 232, 249, 0.14);
+}
+
+.river-memoria-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+
+  border: 1px solid rgba(103, 232, 249, 0.22);
+  border-radius: 999px;
+  background: rgba(7, 21, 27, 0.75);
+
+  color: #a5f3fc;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.river-memoria-toggle:hover {
+  border-color: rgba(165, 243, 252, 0.5);
+}
+
+.river-memoria-conteggio {
+  padding: 0 7px;
+
+  border-radius: 999px;
+  background: rgba(103, 232, 249, 0.18);
+
+  font-size: 11px;
+}
+
+.river-memoria-freccia {
+  margin-left: auto;
+
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.river-memoria-corpo {
+  margin-top: 10px;
+}
+
+.river-memoria-nota {
+  margin: 0 0 10px;
+
+  color: #7c8ea0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.river-memoria-vuoto {
+  margin: 0;
+
+  color: #64748b;
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.river-memoria-lista {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+
+  list-style: none;
+}
+
+.river-memoria-voce {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 14px;
+  background: rgba(8, 26, 34, 0.85);
+}
+
+.river-memoria-testo {
+  min-width: 0;
+  margin: 0;
+
+  color: #dbeafe;
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.river-memoria-azione {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+
+  border: 1px solid rgba(165, 243, 252, 0.35);
+  border-radius: 999px;
+  background: rgba(103, 232, 249, 0.12);
+
+  color: #a5f3fc;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.river-memoria-azione:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.river-memoria-azione.is-fatto {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(74, 222, 128, 0.14);
+  color: #86efac;
+}
+
+.river-memoria-azione.is-errore {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+}
+
+@media (max-width: 640px) {
+  .river-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .river-head-azioni {
+    margin-left: auto;
+  }
+
+  .river-memoria-voce {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .river-memoria-azione {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .river-sasso,
+  .river-badge.is-piena {
+    animation: none;
+  }
+}
