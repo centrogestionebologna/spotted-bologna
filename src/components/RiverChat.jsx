@@ -586,7 +586,8 @@ function RiverChat({ user, isAdmin = false }) {
 
       setTesto("");
       setAdesso(Date.now());
-      inputRef.current?.focus();
+      /* Il cursore resta in acqua: la tastiera non si chiude. */
+      inputRef.current?.focus({ preventScroll: true });
 
       /* La foglia si toglie dal fiume appena supera la foce. */
       window.setTimeout(() => {
@@ -832,11 +833,16 @@ function RiverChat({ user, isAdmin = false }) {
           }
         />
 
+        {/*
+         * Il tocco non deve togliere il fuoco all'input: senza il
+         * preventDefault la tastiera si chiuderebbe a ogni invio.
+         */}
         <button
           type="submit"
           className="river-invia"
           aria-label="Lascia andare il messaggio nel fiume"
           disabled={invio || !testo.trim()}
+          onPointerDown={(evento) => evento.preventDefault()}
         >
           {invio ? (
             "…"
