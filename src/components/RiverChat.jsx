@@ -157,6 +157,7 @@ function RiverChat({ user, isAdmin = false }) {
   const [memoria, setMemoria] = useState(leggiMemoriaSalvata);
   const [memoriaAperta, setMemoriaAperta] = useState(false);
   const [inviate, setInviate] = useState({});
+  const [scrivendo, setScrivendo] = useState(false);
 
   const clientIdRef = useRef(creaClientId());
   const pulizieRef = useRef(new Set());
@@ -323,6 +324,77 @@ function RiverChat({ user, isAdmin = false }) {
         audio.ctx.close();
       } catch (erroreChiusura) {
         /* Il contesto era già chiuso: niente da fare. */
+      }
+    };
+  }, []);
+
+  /*
+   * Sul telefono la tastiera si apre e sposta tutta la pagina. Torno
+   * a incollare la riga di scrittura sopra la tastiera, così si
+   * vedono insieme la tastiera e il fiume, senza vuoti in mezzo.
+   */
+  useEffect(() => {
+    const input = inputRef.current;
+    const vista = window.visualViewport;
+
+    if (!input) {
+      return;
+    }
+
+    const sopraLaTastiera = () => {
+      if (document.activeElement !== input) {
+        return;
+      }
+
+      const riga = input.closest(".river-composer");
+
+      if (!riga) {
+        return;
+      }
+
+      const fondo = vista
+        ? vista.offsetTop + vista.height
+        : window.innerHeight;
+
+      /* Otto pixel di respiro tra la riga e la tastiera. */
+      const scarto = riga.getBoundingClientRect().bottom - (fondo - 8);
+
+      if (Math.abs(scarto) > 2) {
+        window.scrollBy({ top: scarto, behavior: "auto" });
+      }
+    };
+
+    let attesa = null;
+
+    const accendi = () => {
+      window.clearTimeout(attesa);
+      setScrivendo(true);
+      window.requestAnimationFrame(sopraLaTastiera);
+    };
+
+    /*
+     * Tocco sul pulsante: la pagina si allarga un attimo dopo, così il
+     * dito trova ancora il pulsante dove l'ha toccato.
+     */
+    const spegni = () => {
+      attesa = window.setTimeout(() => setScrivendo(false), 220);
+    };
+
+    input.addEventListener("focus", accendi);
+    input.addEventListener("blur", spegni);
+
+    /* La tastiera impiega un attimo ad aprirsi: riallineo quando cambia. */
+    if (vista) {
+      vista.addEventListener("resize", sopraLaTastiera);
+    }
+
+    return () => {
+      window.clearTimeout(attesa);
+      input.removeEventListener("focus", accendi);
+      input.removeEventListener("blur", spegni);
+
+      if (vista) {
+        vista.removeEventListener("resize", sopraLaTastiera);
       }
     };
   }, []);
@@ -611,7 +683,11 @@ function RiverChat({ user, isAdmin = false }) {
   };
 
   return (
-    <section className="section-card river-card">
+    <section
+      className={`section-card river-card${
+        scrivendo ? " is-scrivendo" : ""
+      }`}
+    >
       <div className="river-head">
         <div>
           <span className="river-eyebrow">
@@ -759,9 +835,19 @@ function RiverChat({ user, isAdmin = false }) {
         <button
           type="submit"
           className="river-invia"
+          aria-label="Lascia andare il messaggio nel fiume"
           disabled={invio || !testo.trim()}
         >
-          {invio ? "…" : "Lascia andare 🌿"}
+          {invio ? (
+            "…"
+          ) : (
+            <>
+              <span className="river-invia-parola">
+                Lascia andare
+              </span>
+              <span className="river-invia-glifo">🌿</span>
+            </>
+          )}
         </button>
       </form>
 

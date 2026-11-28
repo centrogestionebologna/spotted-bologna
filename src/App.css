@@ -5621,6 +5621,7 @@ details summary {
 .river-scena {
   position: relative;
   height: 420px;
+  transition: height 220ms ease;
   overflow: hidden;
   border: 1px solid rgba(103, 232, 249, 0.18);
   border-radius: 18px;
@@ -5912,6 +5913,11 @@ details summary {
   box-shadow: 0 10px 24px rgba(34, 211, 238, 0.18);
 }
 
+/* Nell'intestazione il glifo resta nascosto: c'è già la parola. */
+.river-invia-glifo {
+  display: none;
+}
+
 .river-invia:disabled {
   cursor: default;
   opacity: 0.55;
@@ -6024,14 +6030,42 @@ details summary {
     font-size: 12px;
   }
 
+  /*
+   * Riga unica anche sul telefono: la tastiera e il testo restano
+   * vicini, senza il pulsante che allunga la colonna.
+   */
   .river-composer {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
     gap: 8px;
+    margin-top: 10px;
+  }
+
+  .river-input {
+    padding: 11px 14px;
   }
 
   .river-invia {
-    width: 100%;
+    width: auto;
+    padding: 11px 14px;
+  }
+
+  .river-invia-parola {
+    display: none;
+  }
+
+  .river-invia-glifo {
+    display: inline;
+  }
+
+  /* Mentre si scrive l'intestazione si stringe: entra tutto. */
+  .river-card.is-scrivendo .river-intro,
+  .river-card.is-scrivendo .river-piede {
+    display: none;
+  }
+
+  .river-card.is-scrivendo .river-scena {
+    height: 210px;
   }
 
   .river-piede {
